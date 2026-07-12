@@ -451,21 +451,45 @@
 const ROOM = new URLSearchParams(location.search).get('room') || 'living-room';
 document.getElementById('roomLabel').textContent = 'room: ' + ROOM;
 
-// ---------- Simple pluggable channel (BroadcastChannel based) ----------
+// ---------- Pluggable Internet Channel (Cloud WebSocket Based) ----------
 const Channel = (() => {
-  const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('watchparty-' + ROOM) : null;
   const listeners = [];
   const clientId = Math.random().toString(36).slice(2, 9);
+  
+  // We use a public cloud relay topic based on your room name
+  // TIP: Use a unique room name in your URL to avoid mixing up with strangers!
+  const topic = 'watchparty-' + ROOM.replace(/[^a-zA-Z0-9]/g, '-');
+  
+  // Establish a live cloud connection across the internet
+  const ws = new WebSocket(`wss://ntfy.sh/${topic}/ws`);
 
-  if (bc) {
-    bc.onmessage = (e) => listeners.forEach(fn => fn(e.data));
-  }
+  ws.onmessage = (e) => {
+    try {
+      const cloudData = JSON.parse(e.data);
+      // Ensure it is a valid real-time broadcast message
+      if (cloudData.event === 'message' && cloudData.message) {
+        const payload = JSON.parse(cloudData.message);
+        
+        // Ignore messages that originated from our own screen
+        if (payload._from !== clientId) {
+          listeners.forEach(fn => fn(payload));
+        }
+      }
+    } catch (err) {
+      // Quietly bypass system connection pings from the relay server
+    }
+  };
 
   return {
     id: clientId,
     send(payload) {
       const msg = { ...payload, _from: clientId, _t: Date.now() };
-      if (bc) bc.postMessage(msg);
+      
+      // Blast the state change up to the cloud server, which relays it to your friend
+      fetch(`https://ntfy.sh/${topic}`, {
+        method: 'POST',
+        body: JSON.stringify(msg)
+      }).catch(err => console.error("Sync network drop:", err));
     },
     onMessage(fn) { listeners.push(fn); }
   };
