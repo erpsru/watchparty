@@ -312,43 +312,64 @@
         });
 
         // =========================================================================
-        // UI AND UTILITY HELPER FUNCS
-        // =========================================================================
-        function loadNewVideo() {
-            const url = document.getElementById('videoUrlInput').value.trim();
-            if (!url) return;
-            
-            // Updates media source paths seamlessly inside the active framework shell
-            player.source = {
-                type: 'video',
-                sources: [{ src: url }]
-            };
-            
-            appendMessage("System", "Loaded new movie path stream successfully.");
-        }
+// UI AND UTILITY HELPER FUNCS (UPDATED FOR YOUTUBE SUPPORT)
+// =========================================================================
 
-        function sendChatMessage() {
-            const input = document.getElementById('chatMessageInput');
-            const msg = input.value.trim();
-            if (!msg) return;
+// Smart URL extractor to grab the 11-character YouTube video ID
+function getYouTubeId(url) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+}
 
-            watchChannel.trigger('client-chat-msg', { user: 'Friend', text: msg });
-            appendMessage('You', msg);
-            input.value = '';
-        }
+function loadNewVideo() {
+    const url = document.getElementById('videoUrlInput').value.trim();
+    if (!url) return;
+    
+    const ytId = getYouTubeId(url);
+    
+    if (ytId) {
+        // If it's a YouTube link, change the provider type seamlessly
+        player.source = {
+            type: 'video',
+            sources: [{
+                src: ytId,
+                provider: 'youtube', // Tells Plyr to switch to YouTube stream mode
+            }],
+        };
+        appendMessage("System", "Loaded YouTube stream successfully.");
+    } else {
+        // Otherwise, treat it as a direct raw video file link (.mp4, .m3u8, etc.)
+        player.source = {
+            type: 'video',
+            sources: [{ src: url }]
+        };
+        appendMessage("System", "Loaded raw video link successfully.");
+    }
+}
 
-        function appendMessage(user, text) {
-            const log = document.getElementById('chatLog');
-            const bubble = document.createElement('div');
-            bubble.className = 'message-bubble';
-            bubble.innerHTML = `<div class="message-author">${user}</div><div>${text}</div>`;
-            log.appendChild(bubble);
-            log.scrollTop = log.scrollHeight;
-        }
+function sendChatMessage() {
+    const input = document.getElementById('chatMessageInput');
+    const msg = input.value.trim();
+    if (!msg) return;
 
-        function toggleChatPanel() {
-            document.getElementById('chatPanel').classList.toggle('collapsed');
-        }
+    watchChannel.trigger('client-chat-msg', { user: 'Friend', text: msg });
+    appendMessage('You', msg);
+    input.value = '';
+}
+
+function appendMessage(user, text) {
+    const log = document.getElementById('chatLog');
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.innerHTML = `<div class="message-author">${user}</div><div>${text}</div>`;
+    log.appendChild(bubble);
+    log.scrollTop = log.scrollHeight;
+}
+
+function toggleChatPanel() {
+    document.getElementById('chatPanel').classList.toggle('collapsed');
+}
 
         // Allow pressing enter key to transmit chats instantly
         document.getElementById('chatMessageInput').addEventListener('keydown', (e) => {
