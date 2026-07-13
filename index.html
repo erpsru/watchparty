@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cinema Watch Party Pro</title>
-    
-    <!-- Third-Party Framework Layers -->
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
     <script src="https://js.pusher.com/8.0/pusher.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
 
     <style>
         :root {
@@ -23,302 +23,109 @@
             --glass-border: rgba(255, 255, 255, 0.1);
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+        body { background-color: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-        /* Nav Interface Bar */
         .top-navbar {
-            padding: 12px 20px;
-            background: rgba(15, 15, 22, 0.95);
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 15px;
-            z-index: 5;
+            padding: 12px 20px; background: rgba(15, 15, 22, 0.95); border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: space-between; gap: 15px; z-index: 5; flex-wrap: wrap;
         }
-
-        .nav-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .media-input-wrapper {
-            flex: 1;
-            max-width: 600px;
-            display: flex;
-            gap: 8px;
-        }
+        .nav-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .media-input-wrapper { flex: 1; max-width: 600px; display: flex; gap: 8px; min-width: 260px; }
 
         input[type="text"], select {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--border-color);
-            padding: 8px 14px;
-            border-radius: 6px;
-            color: #fff;
-            outline: none;
-            font-size: 0.9rem;
+            background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); padding: 8px 14px;
+            border-radius: 6px; color: #fff; outline: none; font-size: 0.9rem;
         }
-
-        input[type="text"]:focus {
-            border-color: var(--accent-color);
-        }
+        input[type="text"]:focus { border-color: var(--accent-color); }
 
         button {
-            background: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            transition: opacity 0.2s;
+            background: var(--accent-color); color: white; border: none; padding: 8px 16px; border-radius: 6px;
+            cursor: pointer; font-weight: 600; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px;
+            transition: opacity 0.2s, background 0.2s; white-space: nowrap;
         }
+        button:hover { opacity: 0.9; }
+        button.ghost { background: rgba(255,255,255,0.08); }
+        button.danger { background: var(--sync-color); }
 
-        button:hover {
-            opacity: 0.9;
-        }
+        .app-container { display: flex; flex: 1; width: 100%; height: calc(100vh - 65px); overflow: hidden; }
 
-        /* Main Workspace Structure */
-        .app-container {
-            display: flex;
-            flex: 1;
-            width: 100%;
-            height: calc(100vh - 65px);
-            overflow: hidden;
-        }
+        .video-section { flex: 3; display: flex; flex-direction: column; justify-content: center; background: #000; position: relative; }
+        .player-wrapper { width: 100%; max-height: 100%; aspect-ratio: 16 / 9; margin: auto; position: relative; }
 
-        .video-section {
-            flex: 3;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            background: #000;
-            position: relative;
-        }
-
-        .player-wrapper {
-            width: 100%;
-            max-height: 100%;
-            aspect-ratio: 16 / 9;
-            margin: auto;
-            position: relative;
-        }
-
-        /* Sidebar Control Center */
         .sidebar-section {
-            flex: 1;
-            min-width: 350px;
-            max-width: 420px;
-            background: var(--panel-bg);
-            border-left: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
-            backdrop-filter: blur(15px);
+            flex: 1; min-width: 350px; max-width: 420px; background: var(--panel-bg); border-left: 1px solid var(--border-color);
+            display: flex; flex-direction: column; backdrop-filter: blur(15px); overflow-y: auto;
         }
+        .sidebar-panel { padding: 15px; border-bottom: 1px solid var(--border-color); }
+        .panel-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.4); margin-bottom: 10px; font-weight: 700; }
 
-        .sidebar-panel {
-            padding: 15px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .panel-title {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: rgba(255,255,255,0.4);
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-
-        /* Adjustment Control Tools Layout */
-        .control-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-        }
-
+        .control-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
         .tool-btn-group {
-            display: flex;
-            background: rgba(255,255,255,0.04);
-            border-radius: 6px;
-            border: 1px solid var(--border-color);
-            overflow: hidden;
-            align-items: center;
-            justify-content: space-between;
+            display: flex; background: rgba(255,255,255,0.04); border-radius: 6px; border: 1px solid var(--border-color);
+            overflow: hidden; align-items: center; justify-content: space-between;
         }
+        .tool-btn-group button { background: transparent; padding: 6px 12px; border-radius: 0; }
+        .tool-btn-group button:hover { background: rgba(255,255,255,0.08); }
+        .tool-label { font-size: 0.8rem; padding: 0 4px; color: rgba(255,255,255,0.8); }
 
-        .tool-btn-group button {
-            background: transparent;
-            padding: 6px 12px;
-            border-radius: 0;
-        }
+        .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+        .row select { flex: 1; }
 
-        .tool-btn-group button:hover {
-            background: rgba(255,255,255,0.08);
-        }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; min-height: 160px; }
+        .message-bubble { background: rgba(255, 255, 255, 0.04); padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.02); word-break: break-word; }
+        .message-header { display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 4px; }
+        .message-author { color: var(--accent-color); font-weight: bold; }
+        .message-time { color: rgba(255,255,255,0.3); }
 
-        .tool-label {
-            font-size: 0.8rem;
-            padding: 0 4px;
-            color: rgba(255,255,255,0.8);
-        }
+        .latency-badge { background: var(--sync-color); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; display: none; margin-left: 8px; }
 
-        /* Chat Logs Engine */
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .message-bubble {
-            background: rgba(255, 255, 255, 0.04);
-            padding: 8px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(255,255,255,0.02);
-            word-break: break-word;
-        }
-
-        .message-header {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.75rem;
-            margin-bottom: 4px;
-        }
-
-        .message-author {
-            color: var(--accent-color);
-            font-weight: bold;
-        }
-
-        .message-time {
-            color: rgba(255,255,255,0.3);
-        }
-
-        /* Latency Realtime Counter Badge */
-        .latency-badge {
-            background: var(--sync-color);
-            color: white;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: bold;
-            display: none;
-            margin-left: 8px;
-        }
-
-        /* Custom Input Styling overrides for file mapping */
         .file-upload-btn {
-            position: relative;
-            overflow: hidden;
-            background: rgba(255,255,255,0.05);
-            border: 1px dashed var(--border-color);
-            text-align: center;
-            padding: 8px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.8rem;
+            position: relative; overflow: hidden; background: rgba(255,255,255,0.05); border: 1px dashed var(--border-color);
+            text-align: center; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
         }
-        .file-upload-btn input[type="file"] {
-            position: absolute;
-            left: 0; top: 0; opacity: 0; width: 100%; height: 100%;
-            cursor: pointer;
-        }
+        .file-upload-btn input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 
-        /* =========================================================================
-           FULLSCREEN CANVAS LAYER INJECTIONS (Targeted inside active Plyr instances)
-           ========================================================================= */
         .plyr-fullscreen-toast-layer {
-            position: absolute;
-            bottom: 90px;
-            right: 25px;
-            width: 320px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            pointer-events: none;
-            z-index: 10;
+            position: absolute; bottom: 90px; right: 25px; width: 320px; display: flex; flex-direction: column; gap: 8px;
+            pointer-events: none; z-index: 10; transition: bottom 0.25s ease;
         }
+        /* Toast layer lifts with the control bar when it's visible, drops back down when controls hide */
+        .plyr--fullscreen-active.plyr--hide-controls .plyr-fullscreen-toast-layer { bottom: 25px; }
 
         .floating-toast {
-            background: rgba(10, 10, 15, 0.8);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
-            padding: 10px 14px;
-            border-radius: 10px;
-            color: #fff;
-            font-size: 0.9rem;
-            word-break: break-word;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            border-left: 4px solid var(--accent-color);
-            animation: toastSequence 5s forwards;
+            background: rgba(10, 10, 15, 0.8); backdrop-filter: blur(12px); border: 1px solid var(--glass-border);
+            padding: 10px 14px; border-radius: 10px; color: #fff; font-size: 0.9rem; word-break: break-word;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); border-left: 4px solid var(--accent-color);
+            animation: toastSequence 5s forwards; cursor: pointer;
         }
-
         @keyframes toastSequence {
             0% { transform: translateY(25px) scale(0.95); opacity: 0; }
             8% { transform: translateY(0) scale(1); opacity: 1; }
-            92% { transform: translateY(0); opacity: 1; }
-            100% { transform: translateY(-20px); opacity: 0; }
+            88% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-16px); opacity: 0; }
         }
 
-        /* Auto-Lifting Glassmorphic Fullscreen Overlay Box */
         .plyr-fullscreen-input-layer {
-            position: absolute;
-            bottom: 80px;
-            right: 25px;
-            width: 320px;
-            background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
-            padding: 12px;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-            z-index: 11;
-            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+            position: absolute; bottom: 80px; right: 25px; width: 320px; background: var(--glass-bg);
+            backdrop-filter: blur(16px); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5); z-index: 11;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease, bottom 0.25s ease;
         }
+        .plyr--fullscreen-active.plyr--hide-controls .plyr-fullscreen-input-layer { bottom: 25px; }
+        /* Only auto-hide the *box chrome* when idle; text already sent stays visible via toast layer above */
+        .plyr--hide-controls .plyr-fullscreen-input-layer.idle-hide { transform: translateY(85px); opacity: 0; pointer-events: none; }
 
-        /* Automatic Layout Sync: Drops away smoothly when control tracking idles out */
-        .plyr--hide-controls .plyr-fullscreen-input-layer {
-            transform: translateY(75px);
-            opacity: 0;
-            pointer-events: none;
+        .plyr__captions { font-size: var(--sub-size-val, 16px) !important; opacity: var(--sub-opacity-val, 1) !important; transform: translateY(var(--sub-pos-val, 0px)) !important; transition: all 0.1s ease; }
+
+        .custom-player-toggle {
+            background: rgba(255,255,255,0.08) !important; border: 1px solid rgba(255,255,255,0.15) !important;
+            padding: 6px 10px !important; border-radius: 6px !important; font-size: 0.72rem !important;
+            margin-left: 6px !important; display: flex !important; align-items: center; gap: 4px;
         }
+        .custom-player-toggle.active { background: var(--accent-color) !important; border-color: var(--accent-color) !important; }
 
-        /* Native Plyr Overrides for Subtitle Customization Variables */
-        .plyr__captions {
-            font-size: var(--sub-size-val, 16px) !important;
-            opacity: var(--sub-opacity-val, 1) !important;
-            transform: translateY(var(--sub-pos-val, 0px)) !important;
-            transition: all 0.1s ease;
-        }
-
-        /* Custom control injection classes */
-        .plyr__controls .plyr-chat-dropdown-trigger {
-            position: relative;
-        }
-
-        /* Responsive Breakpoints */
         @media (max-width: 900px) {
             .app-container { flex-direction: column; overflow-y: auto; }
             .video-section { flex: none; width: 100%; position: sticky; top:0; z-index:10; }
@@ -329,35 +136,30 @@
 </head>
 <body>
 
-    <!-- Upper Dashboard Header Bar -->
     <div class="top-navbar">
         <div class="nav-group">
-            <button onclick="createNewRoom()" style="background: rgba(255,255,255,0.08);">🆕 Create New Room</button>
-            <button onclick="shareActiveRoom()" style="background: var(--accent-color);">🔗 Share Invite Link</button>
+            <button class="ghost" onclick="createNewRoom()">🆕 Create New Room</button>
+            <button onclick="shareActiveRoom()">🔗 Share Invite Link</button>
         </div>
-        
+
         <div class="media-input-wrapper">
-            <input type="text" id="videoUrlInput" placeholder="Paste Direct Streaming Video Asset Address (.mp4, YouTube, or .m3u8 HLS)">
-            <button onclick="loadNewVideo()">Load Content</button>
+            <input type="text" id="videoUrlInput" placeholder="Paste video link (.mp4, YouTube, or .m3u8 HLS)">
+            <button onclick="loadNewVideo()">Load</button>
         </div>
 
         <div class="nav-group">
-            <button onclick="requestRoomSync()" style="background: var(--sync-color);">🔄 Sync to Me<span id="latencyBadge" class="latency-badge"></span></button>
+            <button class="danger" onclick="requestRoomSync()">🔄 Sync to Room<span id="latencyBadge" class="latency-badge"></span></button>
         </div>
     </div>
 
-    <!-- Interface Workspace Framework Split -->
     <div class="app-container">
-        
-        <!-- Interactive Player Pipeline Canvas -->
+
         <div class="video-section">
             <div class="player-wrapper" id="videoWrapper">
-                <video id="player" playsinline controls></video>
-                
-                <!-- Dynamic Overlay Elements (Injected programmatically into Plyr on init) -->
+                <video id="player" playsinline controls crossorigin></video>
                 <div id="toastLayer" class="plyr-fullscreen-toast-layer"></div>
-                
-                <div id="glassInputLayer" class="plyr-fullscreen-input-layer" style="display: none;">
+
+                <div id="glassInputLayer" class="plyr-fullscreen-input-layer idle-hide" style="display: none;">
                     <div style="display:flex; gap:8px;">
                         <input type="text" id="fullscreenChatInput" placeholder="Send quick message..." style="flex:1; padding:6px 10px; font-size:0.85rem;">
                         <button onclick="transmitMessage(true)" style="padding:6px 12px; font-size:0.85rem;">Send</button>
@@ -366,58 +168,67 @@
             </div>
         </div>
 
-        <!-- Sidebar Engine Panel Grid Layout -->
         <div class="sidebar-section">
-            
-            <!-- Profiles & User Identity Management Block -->
+
             <div class="sidebar-panel">
-                <div class="panel-title">User Profile Identification</div>
+                <div class="panel-title">User Profile</div>
                 <div style="display: flex; gap:8px; align-items:center;">
-                    <span style="font-size:0.85rem; color:rgba(255,255,255,0.5);">Handle:</span>
+                    <span style="font-size:0.85rem; color:rgba(255,255,255,0.5);">Name:</span>
                     <input type="text" id="usernameInput" value="" onchange="updateProfileHandle()" style="flex:1; padding:6px 10px;">
                 </div>
+                <div style="font-size:0.72rem; color:rgba(255,255,255,0.35); margin-top:6px;" id="roomIdLabel"></div>
             </div>
 
-            <!-- Precision Subtitle Offsetting & Styler Engine Box -->
             <div class="sidebar-panel">
-                <div class="panel-title">Subtitle Timing & Presentation Control</div>
+                <div class="panel-title">Subtitle Timing &amp; Presentation</div>
                 <div class="control-grid">
-                    
                     <div class="tool-btn-group">
                         <button onclick="adjustSubtitleTiming(-0.1)">-</button>
                         <span class="tool-label" id="lblSubDelay">Timing: 0.0s</span>
                         <button onclick="adjustSubtitleTiming(0.1)">+</button>
                     </div>
-
                     <div class="tool-btn-group">
                         <button onclick="adjustSubtitleStyling('size', -2)">-</button>
                         <span class="tool-label" id="lblSubSize">Size: 16px</span>
                         <button onclick="adjustSubtitleStyling('size', 2)">+</button>
                     </div>
-
                     <div class="tool-btn-group">
                         <button onclick="adjustSubtitleStyling('pos', -5)">-</button>
                         <span class="tool-label" id="lblSubPos">Lift: 0px</span>
                         <button onclick="adjustSubtitleStyling('pos', 5)">+</button>
                     </div>
-
                     <div class="tool-btn-group">
                         <button onclick="adjustSubtitleStyling('opacity', -0.1)">-</button>
                         <span class="tool-label" id="lblSubOpacity">Opacity: 1.0</span>
                         <button onclick="adjustSubtitleStyling('opacity', 0.1)">+</button>
                     </div>
-
                 </div>
-                <div class="file-upload-btn" style="margin-top:10px;">
-                    📂 Upload External Subtitle Track (.vtt, .srt)
+
+                <div class="row">
+                    <select id="subtitleTrackSelect" onchange="selectSubtitleTrack(this.value, true)">
+                        <option value="-1">Subtitles: Off</option>
+                    </select>
+                </div>
+
+                <div class="row">
+                    <input type="text" id="subtitleUrlInput" placeholder="Paste .vtt/.srt subtitle URL">
+                    <button class="ghost" onclick="ingestSubtitleFromUrl()">Add</button>
+                </div>
+                <div class="file-upload-btn" style="margin-top:8px;">
+                    📂 Upload Subtitle File (.vtt, .srt) — local to you only
                     <input type="file" id="externalSubFile" accept=".vtt,.srt" onchange="ingestExternalSubtitles(this)">
                 </div>
             </div>
 
-            <!-- Main Conversation Stream Scroll Container -->
+            <div class="sidebar-panel" id="audioTrackPanel" style="display:none;">
+                <div class="panel-title">Audio Language (Dual Audio)</div>
+                <div class="row">
+                    <select id="audioTrackSelect" onchange="selectAudioTrack(this.value, true)"></select>
+                </div>
+            </div>
+
             <div class="chat-messages" id="chatLog"></div>
 
-            <!-- Core Desktop Input Bar Panel -->
             <div class="sidebar-panel" style="border-bottom:none; border-top:1px solid var(--border-color); background: rgba(0,0,0,0.15);">
                 <div style="display:flex; gap:8px;">
                     <input type="text" id="sidebarChatInput" placeholder="Type a room message...">
@@ -430,54 +241,56 @@
 
     <script>
         // =========================================================================
-        // SYSTEM CONFIGURATION PROPERTIES
+        // CONFIG
         // =========================================================================
         const PUSHER_KEY = '25790a5661338b7c7756';
         const PUSHER_CLUSTER = 'ap2';
-        const PUSHER_SECRET = '9a7ffd7b2858442cd939'; 
+        const PUSHER_SECRET = '9a7ffd7b2858442cd939';
+        // NOTE: signing client-side like this exposes the secret to anyone who views
+        // page source, which lets them forge events / join any room. Left as-is per
+        // request (simplest option for a friends-only setup) — swap for a real
+        // server-side auth endpoint later if you ever open this beyond trusted friends.
 
-        // Manage Profile Handles
         let currentUsername = localStorage.getItem('party_user') || 'Guest_' + Math.floor(1000 + Math.random() * 9000);
         document.getElementById('usernameInput').value = currentUsername;
 
-        // Auto-Setup Structural Space Parameters
+        // ---- Room handling: read from URL, or create one automatically ----
         const urlParams = new URLSearchParams(window.location.search);
         let roomId = urlParams.get('room');
+        const isFreshlyCreatedRoom = !roomId;
         if (!roomId) {
             roomId = Math.random().toString(36).substring(2, 13);
-            window.history.pushState({}, '', `?room=${roomId}`);
+            window.history.replaceState({}, '', `?room=${roomId}`);
         }
+        document.getElementById('roomIdLabel').innerText = 'Room: ' + roomId;
 
         const channelName = `private-watch-${roomId}`;
-        
-        // Configuration Engine Variables
+
         let isSyncing = false;
         let updateTimeout;
         let hlsInstance = null;
         let localHeartbeatInterval = null;
-        
-        // Subtitle Offset Vectors
+
         let subDelayOffset = 0.0;
         let subSizePx = 16;
         let subOpacityFloat = 1.0;
         let subPositionLift = 0;
 
-        // Fullscreen Visibility Switches
         let floatingToastActive = true;
         let glassInputActive = false;
 
-        // Core HTML Node Targets
+        let activeVideoUrl = '';   // the video actually loaded right now (source of truth for late joiners)
+        let currentSubtitleTrackId = -1;
+        let currentAudioTrackId = -1;
+
         const videoElement = document.getElementById('player');
-        
-        // Initialize Core View Engine
+
         const player = new Plyr(videoElement, {
-            controls: [
-                'play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'fullscreen'
-            ],
-            settings: ['quality', 'speed', 'language', 'audioTrack']
+            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'fullscreen'],
+            settings: ['captions', 'quality', 'speed'],
+            captions: { active: true, update: true }
         });
 
-        // Initialize Secure Pusher Client System Hooks
         const pusher = new Pusher(PUSHER_KEY, {
             cluster: PUSHER_CLUSTER,
             channelAuthorization: {
@@ -493,7 +306,6 @@
 
         const watchChannel = pusher.subscribe(channelName);
 
-        // Inject Fullscreen Overlays directly inside Plyr DOM container once readied
         player.on('ready', () => {
             const plyrContainer = document.querySelector('.plyr');
             if (plyrContainer) {
@@ -504,43 +316,52 @@
         });
 
         // =========================================================================
-        // AUTOMATED DYNAMIC DISCOVERY LOOP (HANDLES INSTANT JOIN CATCHUP)
+        // LATE-JOINER CATCH-UP (fixed: no longer depends on currentTime > 0.1,
+        // which meant a friend joining right as playback started, or right after
+        // a pause-at-start, got nothing back — this is why "friend loads page,
+        // sees nothing" used to happen)
         // =========================================================================
         watchChannel.bind('pusher:subscription_succeeded', () => {
-            appendMessage("System", "Connected to Room Room ID: " + roomId);
-            // Broadcast immediate query discovery request to see if anyone is active
+            appendMessage("System", "Connected to room: " + roomId);
             setTimeout(() => {
                 watchChannel.trigger('client-request-status', { from: currentUsername });
-            }, 800);
+            }, 600);
+
+            if (isFreshlyCreatedRoom) {
+                setTimeout(shareActiveRoom, 500);
+            }
         });
 
-        watchChannel.bind('client-request-status', (data) => {
-            // Active rooms respond with target state configurations
-            if (player.currentTime > 0.1) {
+        watchChannel.bind('client-request-status', () => {
+            // Anyone who currently has a video loaded answers — not gated on playback time
+            if (activeVideoUrl) {
                 watchChannel.trigger('client-respond-status', {
-                    url: document.getElementById('videoUrlInput').value,
+                    url: activeVideoUrl,
                     time: player.currentTime,
-                    playing: player.playing
+                    playing: player.playing,
+                    audioTrack: currentAudioTrackId,
+                    subtitleTrack: currentSubtitleTrackId,
+                    subDelayOffset
                 });
             }
         });
 
         watchChannel.bind('client-respond-status', (data) => {
-            const currentUrl = document.getElementById('videoUrlInput').value;
-            // Catch up instantly if the current stream context is uninitialized
-            if (!currentUrl && data.url) {
-                document.getElementById('videoUrlInput').value = data.url;
+            // Only catch up if we don't already have this exact stream loaded
+            if (data.url && data.url !== activeVideoUrl) {
                 processMediaParsing(data.url, () => {
                     isSyncing = true;
                     player.currentTime = data.time;
+                    subDelayOffset = data.subDelayOffset || 0;
+                    document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
                     if (data.playing) player.play();
-                    setTimeout(() => { isSyncing = false; }, 600);
+                    setTimeout(() => { isSyncing = false; }, 800);
                 });
             }
         });
 
         // =========================================================================
-        // STREAM SYNCHRONIZATION EVENT LOOPS & TRACK HARNESSES
+        // SYNC EVENTS
         // =========================================================================
         watchChannel.bind('client-video-play', (data) => {
             if (Math.abs(player.currentTime - data.time) > 1.2) {
@@ -564,27 +385,36 @@
             if (data.type === 'audio' && hlsInstance) {
                 if (hlsInstance.audioTrack !== data.trackId) {
                     hlsInstance.audioTrack = data.trackId;
-                    appendMessage("System", `Global Audio track forced to index [${data.trackId}]`);
+                    currentAudioTrackId = data.trackId;
+                    document.getElementById('audioTrackSelect').value = data.trackId;
+                    appendMessage("System", `Room audio switched to track ${data.trackId}`);
                 }
             } else if (data.type === 'caption') {
-                player.currentCaption = data.trackId;
+                selectSubtitleTrack(data.trackId, false);
+            } else if (data.type === 'subdelay') {
+                subDelayOffset = data.value;
+                document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
+                applySubtitleOffsetToCues();
             }
+        });
+
+        // A host adding a subtitle by URL is broadcast so everyone gets the same track automatically
+        watchChannel.bind('client-subtitle-url', (data) => {
+            addSubtitleTrackFromUrl(data.url, data.label, false);
         });
 
         watchChannel.bind('client-heartbeat', (data) => {
             if (!player.playing || isSyncing) return;
             const absoluteDelta = data.time - player.currentTime;
             const badge = document.getElementById('latencyBadge');
-            
             if (absoluteDelta > 1.5) {
-                badge.innerText = `${absoluteDelta.toFixed(1)}s late`;
+                badge.innerText = `${absoluteDelta.toFixed(1)}s behind`;
                 badge.style.display = 'inline-block';
             } else {
                 badge.style.display = 'none';
             }
         });
 
-        // Capture internal active playback events
         player.on('play', () => {
             if (isSyncing) return;
             watchChannel.trigger('client-video-play', { time: player.currentTime });
@@ -605,12 +435,6 @@
             }, 250);
         });
 
-        // Synchronize Global Language Track Selections
-        player.on('languagechange', () => {
-            if (isSyncing) return;
-            watchChannel.trigger('client-global-track', { type: 'caption', trackId: player.currentCaption });
-        });
-
         function startHeartbeatBroadcast() {
             clearInterval(localHeartbeatInterval);
             localHeartbeatInterval = setInterval(() => {
@@ -621,6 +445,7 @@
         }
 
         function requestRoomSync() {
+            watchChannel.trigger('client-request-status', { from: currentUsername });
             isSyncing = true;
             watchChannel.trigger('client-video-play', { time: player.currentTime });
             document.getElementById('latencyBadge').style.display = 'none';
@@ -628,102 +453,157 @@
         }
 
         // =========================================================================
-        // CORE MEDIA ENGINE STRUCTURAL ROUTING
+        // MEDIA LOADING
         // =========================================================================
         function loadNewVideo() {
             const targetUrl = document.getElementById('videoUrlInput').value.trim();
             if (!targetUrl) return;
             processMediaParsing(targetUrl);
+            watchChannel.trigger('client-video-play', { time: 0 });
+        }
+
+        function resetSubtitleAndAudioUI() {
+            document.getElementById('subtitleTrackSelect').innerHTML = '<option value="-1">Subtitles: Off</option>';
+            document.getElementById('audioTrackSelect').innerHTML = '';
+            document.getElementById('audioTrackPanel').style.display = 'none';
+            currentSubtitleTrackId = -1;
+            currentAudioTrackId = -1;
+            subDelayOffset = 0.0;
+            document.getElementById('lblSubDelay').innerText = "Timing: 0.0s";
         }
 
         function processMediaParsing(url, executionCallback = null) {
-            if (hlsInstance) {
-                hlsInstance.destroy();
-                hlsInstance = null;
-            }
-            
-            subDelayOffset = 0.0;
-            document.getElementById('lblSubDelay').innerText = "Timing: 0.0s";
+            if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+            resetSubtitleAndAudioUI();
+            activeVideoUrl = url;
+            document.getElementById('videoUrlInput').value = url;
 
             const ytRegExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
             const ytMatch = url.match(ytRegExp);
-            
-            if (ytMatch && ytMatch[2].length === 11) {
-                player.source = {
-                    type: 'video',
-                    sources: [{ src: ytMatch[2], provider: 'youtube' }],
-                };
-                appendMessage("System", "YouTube Asset Stream mapped perfectly.");
-                if(executionCallback) executionCallback();
-            } 
-            else if (url.includes('.m3u8')) {
+
+            if (ytMatch && ytMatch[2] && ytMatch[2].length === 11) {
+                player.source = { type: 'video', sources: [{ src: ytMatch[2], provider: 'youtube' }] };
+                appendMessage("System", "Loaded YouTube video.");
+                if (executionCallback) executionCallback();
+            } else if (url.includes('.m3u8')) {
                 if (Hls.isSupported()) {
                     hlsInstance = new Hls();
                     hlsInstance.loadSource(url);
                     hlsInstance.attachMedia(videoElement);
-                    
                     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-                        appendMessage("System", "HLS Multi-Audio Stream Engine initialized mapping channels.");
-                        
-                        // Map HLS audio tracks directly back out to Pusher framework on manual switch
+                        appendMessage("System", "HLS stream loaded — checking for embedded audio/subtitle tracks.");
+                        populateHlsAudioTracks();
+                        populateEmbeddedSubtitles();
                         hlsInstance.on(Hls.Events.AUDIO_TRACK_SWITCHED, (ev, data) => {
+                            currentAudioTrackId = data.id;
                             watchChannel.trigger('client-global-track', { type: 'audio', trackId: data.id });
                         });
-
-                        if(executionCallback) executionCallback();
+                        if (executionCallback) executionCallback();
                     });
                 } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
                     videoElement.src = url;
-                    if(executionCallback) executionCallback();
+                    if (executionCallback) executionCallback();
                 }
-            } 
-            else {
-                player.source = {
-                    type: 'video',
-                    sources: [{ src: url }]
-                };
-                appendMessage("System", "Raw File Stream parsed container successfully.");
-                if(executionCallback) executionCallback();
+            } else {
+                player.source = { type: 'video', sources: [{ src: url }] };
+                appendMessage("System", "Loaded video file.");
+                // give the browser a beat to parse any in-container text tracks, then refresh the menu
+                setTimeout(populateEmbeddedSubtitles, 500);
+                if (executionCallback) executionCallback();
             }
         }
 
+        function populateHlsAudioTracks() {
+            if (!hlsInstance || !hlsInstance.audioTracks || hlsInstance.audioTracks.length <= 1) return;
+            const sel = document.getElementById('audioTrackSelect');
+            sel.innerHTML = '';
+            hlsInstance.audioTracks.forEach((track, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.text = track.name || track.lang || `Track ${idx}`;
+                sel.appendChild(opt);
+            });
+            sel.value = hlsInstance.audioTrack;
+            currentAudioTrackId = hlsInstance.audioTrack;
+            document.getElementById('audioTrackPanel').style.display = 'block';
+        }
+
+        function selectAudioTrack(idx, broadcast) {
+            idx = parseInt(idx, 10);
+            if (hlsInstance) hlsInstance.audioTrack = idx;
+            currentAudioTrackId = idx;
+            if (broadcast) watchChannel.trigger('client-global-track', { type: 'audio', trackId: idx });
+        }
+
         // =========================================================================
-        // SUBTITLE MANAGEMENT EXTENSION PIPELINES
+        // SUBTITLES: embedded detection, URL add, file upload, timing/style, sync
         // =========================================================================
+        function refreshSubtitleMenu() {
+            const sel = document.getElementById('subtitleTrackSelect');
+            sel.innerHTML = '<option value="-1">Subtitles: Off</option>';
+            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                const t = videoElement.textTracks[i];
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.text = t.label || t.language || `Track ${i}`;
+                sel.appendChild(opt);
+            }
+            sel.value = currentSubtitleTrackId;
+        }
+
+        function populateEmbeddedSubtitles() {
+            // Covers HLS embedded WebVTT tracks and any <track> elements already parsed
+            refreshSubtitleMenu();
+        }
+
+        function selectSubtitleTrack(idx, broadcast) {
+            idx = parseInt(idx, 10);
+            currentSubtitleTrackId = idx;
+            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                videoElement.textTracks[i].mode = (i === idx) ? 'showing' : 'hidden';
+            }
+            document.getElementById('subtitleTrackSelect').value = idx;
+            if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
+        }
+
+        function addSubtitleTrackFromUrl(url, label, broadcast) {
+            const trackNode = document.createElement('track');
+            trackNode.kind = 'captions';
+            trackNode.label = label || 'Subtitle';
+            trackNode.srclang = 'ext';
+            trackNode.src = url;
+            videoElement.appendChild(trackNode);
+            setTimeout(() => {
+                refreshSubtitleMenu();
+                appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
+            }, 400);
+            if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label });
+        }
+
+        function ingestSubtitleFromUrl() {
+            const input = document.getElementById('subtitleUrlInput');
+            const url = input.value.trim();
+            if (!url) return;
+            addSubtitleTrackFromUrl(url, url.split('/').pop().split('.')[0], true);
+            input.value = '';
+        }
+
         function ingestExternalSubtitles(uploaderNode) {
             const nativeFile = uploaderNode.files[0];
             if (!nativeFile) return;
-
             const localBlobUrl = URL.createObjectURL(nativeFile);
-            
-            // Generate clean native track wrapper layer elements
-            const trackNode = document.createElement('track');
-            trackNode.kind = 'captions';
-            trackNode.label = nativeFile.name.replace('.vtt','').replace('.srt','');
-            trackNode.srclang = 'ext';
-            trackNode.src = localBlobUrl;
-            trackNode.default = true;
-
-            videoElement.appendChild(trackNode);
-            
-            // Force Plyr text elements to cycle track array structure
-            setTimeout(() => {
-                player.setCaptionsMenu(); 
-                appendMessage("System", "External tracking subtitles injected.");
-            }, 400);
+            const label = nativeFile.name.replace('.vtt', '').replace('.srt', '') + ' (local only)';
+            addSubtitleTrackFromUrl(localBlobUrl, label, false);
+            appendMessage("System", "Uploaded subtitle is local to your browser only — use the URL option to share subtitles with the room.");
         }
 
-        function adjustSubtitleTiming(stepDelta) {
-            subDelayOffset += stepDelta;
-            document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
-            
-            // Cycle active TextTrack descriptors to calculate shifted runtime maps
+        function applySubtitleOffsetToCues() {
             for (let i = 0; i < videoElement.textTracks.length; i++) {
                 let currentTrack = videoElement.textTracks[i];
                 if (currentTrack.cues) {
                     for (let j = 0; j < currentTrack.cues.length; j++) {
                         let singleCue = currentTrack.cues[j];
-                        if (!singleCue.baseStart) {
+                        if (singleCue.baseStart === undefined) {
                             singleCue.baseStart = singleCue.startTime;
                             singleCue.baseEnd = singleCue.endTime;
                         }
@@ -734,10 +614,16 @@
             }
         }
 
+        function adjustSubtitleTiming(stepDelta) {
+            subDelayOffset += stepDelta;
+            document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
+            applySubtitleOffsetToCues();
+            watchChannel.trigger('client-global-track', { type: 'subdelay', value: subDelayOffset });
+        }
+
         function adjustSubtitleStyling(property, modificationDelta) {
             const element = document.querySelector('.plyr');
-            if(!element) return;
-
+            if (!element) return;
             if (property === 'size') {
                 subSizePx = Math.max(10, Math.min(42, subSizePx + modificationDelta));
                 element.style.setProperty('--sub-size-val', `${subSizePx}px`);
@@ -751,16 +637,15 @@
                 element.style.setProperty('--sub-opacity-val', subOpacityFloat.toFixed(1));
                 document.getElementById('lblSubOpacity').innerText = `Opacity: ${subOpacityFloat.toFixed(1)}`;
             }
+            // subtitle look/position is a personal display preference, not synced across the room on purpose
         }
 
         // =========================================================================
-        // MESSAGING & DISPLAY PRESENTATION CANVAS LOOPS
+        // CHAT + FULLSCREEN OVERLAYS
         // =========================================================================
         watchChannel.bind('client-chat-msg', (data) => {
             appendMessage(data.user, data.text);
-            if (floatingToastActive) {
-                renderFloatingFullscreenToast(data.user, data.text);
-            }
+            if (floatingToastActive) renderFloatingFullscreenToast(data.user, data.text);
         });
 
         function transmitMessage(isFullscreenSource) {
@@ -770,11 +655,7 @@
 
             watchChannel.trigger('client-chat-msg', { user: currentUsername, text: plaintext });
             appendMessage(currentUsername + ' (You)', plaintext);
-            
-            if (isFullscreenSource && floatingToastActive) {
-                renderFloatingFullscreenToast(currentUsername + ' (You)', plaintext);
-            }
-
+            if (isFullscreenSource && floatingToastActive) renderFloatingFullscreenToast(currentUsername + ' (You)', plaintext);
             inputField.value = '';
         }
 
@@ -782,16 +663,11 @@
             const textPanel = document.getElementById('chatLog');
             const containerBubble = document.createElement('div');
             containerBubble.className = 'message-bubble';
-            
             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            containerBubble.innerHTML = `
-                <div class="message-header">
-                    <span class="message-author">${author}</span>
-                    <span class="message-time">${timestamp}</span>
-                </div>
-                <div>${string}</div>
-            `;
-            
+            containerBubble.innerHTML = `<div class="message-header"><span class="message-author"></span><span class="message-time"></span></div><div></div>`;
+            containerBubble.querySelector('.message-author').textContent = author;
+            containerBubble.querySelector('.message-time').textContent = timestamp;
+            containerBubble.querySelector('div:last-child').textContent = string;
             textPanel.appendChild(containerBubble);
             textPanel.scrollTop = textPanel.scrollHeight;
         }
@@ -800,25 +676,24 @@
             const toastFrame = document.getElementById('toastLayer');
             const individualToast = document.createElement('div');
             individualToast.className = 'floating-toast';
-            individualToast.innerHTML = `<strong>${sender}:</strong> ${payload}`;
-            
+            const strong = document.createElement('strong');
+            strong.textContent = sender + ': ';
+            individualToast.appendChild(strong);
+            individualToast.appendChild(document.createTextNode(payload));
+            individualToast.addEventListener('click', () => individualToast.remove()); // click to dismiss early
             toastFrame.appendChild(individualToast);
-            
-            // Delete element node out of resource space cleanly once animation terminates
-            setTimeout(() => {
-                individualToast.remove();
-            }, 5000);
+            setTimeout(() => individualToast.remove(), 5000);
         }
 
         // =========================================================================
-        // APPLICATION INTERFACE HOOK TRIGGERS
+        // ROOM / PROFILE
         // =========================================================================
         function updateProfileHandle() {
             const inputVal = document.getElementById('usernameInput').value.trim();
-            if(inputVal) {
+            if (inputVal) {
                 currentUsername = inputVal;
                 localStorage.setItem('party_user', currentUsername);
-                appendMessage("System", `Changed your handle to: ${currentUsername}`);
+                appendMessage("System", `Changed your name to: ${currentUsername}`);
             }
         }
 
@@ -829,60 +704,60 @@
 
         function shareActiveRoom() {
             const targetInviteUrl = window.location.href;
-            navigator.clipboard.writeText(targetInviteUrl).then(() => {
-                appendMessage("System", "Invite URL path copied to clipboard buffer.");
+            const finish = () => {
                 if (navigator.share) {
-                    navigator.share({
-                        title: 'Watch Party Invite',
-                        url: targetInviteUrl
-                    }).catch(() => {});
+                    navigator.share({ title: 'Watch Party Invite', url: targetInviteUrl }).catch(() => {});
                 } else {
                     alert("Link copied! Send it to your friend: " + targetInviteUrl);
                 }
-            });
+            };
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(targetInviteUrl).then(() => {
+                    appendMessage("System", "Invite link copied to clipboard.");
+                    finish();
+                }).catch(finish);
+            } else {
+                finish();
+            }
         }
 
+        // =========================================================================
+        // REAL IN-PLAYER TOGGLE BUTTONS (fixes the old <select> dropdown hack —
+        // these are now genuine buttons sitting in the Plyr control bar itself)
+        // =========================================================================
         function injectCustomPlayerButtons() {
             const controlsGrid = document.querySelector('.plyr__controls');
             if (!controlsGrid) return;
 
-            // Generate customized interaction switches inside native bar space
-            const secondaryContainer = document.createElement('div');
-            secondaryContainer.style.display = 'flex';
-            secondaryContainer.style.alignItems = 'center';
-            secondaryContainer.className = 'plyr__controls__item';
-            
-            secondaryContainer.innerHTML = `
-                <select id="plyrCustomOverlayControl" style="background:#23242f; padding:2px 6px; font-size:0.75rem; border-radius:4px; border:1px solid rgba(255,255,255,0.2); margin-left:8px;">
-                    <option value="both">Chat Options</option>
-                    <option value="toast_toggle">Floating Texts: On</option>
-                    <option value="input_toggle">Glass Input: Off</option>
-                </select>
-            `;
-
-            controlsGrid.appendChild(secondaryContainer);
-
-            document.getElementById('plyrCustomOverlayControl').addEventListener('change', function(e) {
-                const choice = e.target.value;
-                if(choice === 'toast_toggle') {
-                    floatingToastActive = !floatingToastActive;
-                    this.options[1].text = `Floating Texts: ${floatingToastActive ? 'On' : 'Off'}`;
-                } else if(choice === 'input_toggle') {
-                    glassInputActive = !glassInputActive;
-                    document.getElementById('glassInputLayer').style.display = glassInputActive ? 'block' : 'none';
-                    this.options[2].text = `Glass Input: ${glassInputActive ? 'On' : 'Off'}`;
-                }
-                this.value = 'both'; // Shift target index reset
+            const toastBtn = document.createElement('button');
+            toastBtn.type = 'button';
+            toastBtn.className = 'custom-player-toggle active';
+            toastBtn.innerHTML = '💬 Floating';
+            toastBtn.title = 'Toggle floating chat messages';
+            toastBtn.addEventListener('click', () => {
+                floatingToastActive = !floatingToastActive;
+                toastBtn.classList.toggle('active', floatingToastActive);
             });
+
+            const inputBtn = document.createElement('button');
+            inputBtn.type = 'button';
+            inputBtn.className = 'custom-player-toggle';
+            inputBtn.innerHTML = '⌨ Quick Chat';
+            inputBtn.title = 'Toggle the fullscreen quick-chat box';
+            inputBtn.addEventListener('click', () => {
+                glassInputActive = !glassInputActive;
+                const layer = document.getElementById('glassInputLayer');
+                layer.style.display = glassInputActive ? 'block' : 'none';
+                inputBtn.classList.toggle('active', glassInputActive);
+            });
+
+            controlsGrid.appendChild(toastBtn);
+            controlsGrid.appendChild(inputBtn);
         }
 
-        // Catch enter key events across inputs
-        document.getElementById('sidebarChatInput').addEventListener('keydown', (e) => {
-            if(e.key === 'Enter') transmitMessage(false);
-        });
-        document.getElementById('fullscreenChatInput').addEventListener('keydown', (e) => {
-            if(e.key === 'Enter') transmitMessage(true);
-        });
+        document.getElementById('sidebarChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(false); });
+        document.getElementById('fullscreenChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(true); });
+        document.getElementById('subtitleUrlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(); });
     </script>
 </body>
 </html>
