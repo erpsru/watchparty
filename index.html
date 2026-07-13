@@ -3,26 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Private Watch Party</title>
+    <title>Cinema Watch Party Pro</title>
     
+    <!-- Third-Party Framework Layers -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
     <script src="https://js.pusher.com/8.0/pusher.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
     <style>
         :root {
-            --bg-color: #0f0f12;
-            --panel-bg: rgba(25, 25, 35, 0.65);
+            --bg-color: #0b0b0e;
+            --panel-bg: rgba(20, 20, 27, 0.75);
             --accent-color: #6366f1;
+            --sync-color: #e11d48;
             --text-color: #f3f4f6;
-            --border-color: rgba(255, 255, 255, 0.1);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --glass-bg: rgba(15, 15, 25, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.1);
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
         body {
@@ -34,16 +39,73 @@
             overflow: hidden;
         }
 
-        /* App Main Framework: Flexible Side-by-Side Grid */
+        /* Nav Interface Bar */
+        .top-navbar {
+            padding: 12px 20px;
+            background: rgba(15, 15, 22, 0.95);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            z-index: 5;
+        }
+
+        .nav-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .media-input-wrapper {
+            flex: 1;
+            max-width: 600px;
+            display: flex;
+            gap: 8px;
+        }
+
+        input[type="text"], select {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-color);
+            padding: 8px 14px;
+            border-radius: 6px;
+            color: #fff;
+            outline: none;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent-color);
+        }
+
+        button {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        /* Main Workspace Structure */
         .app-container {
             display: flex;
             flex: 1;
             width: 100%;
-            height: calc(100vh - 60px);
+            height: calc(100vh - 65px);
             overflow: hidden;
         }
 
-        /* Video Section Stays Contained & Locked in Position */
         .video-section {
             flex: 3;
             display: flex;
@@ -51,329 +113,775 @@
             justify-content: center;
             background: #000;
             position: relative;
-            max-height: 100%;
         }
 
-        /* Elastic Player Wrapper prevents controls from sliding off-screen */
         .player-wrapper {
             width: 100%;
             max-height: 100%;
             aspect-ratio: 16 / 9;
             margin: auto;
+            position: relative;
         }
 
-        .plyr {
-            height: 100% !important;
-            max-height: 100vh;
-        }
-
-        /* Clean Sidebar Chat Panel with Custom Internal Scrollbar Rules */
-        .chat-section {
+        /* Sidebar Control Center */
+        .sidebar-section {
             flex: 1;
-            min-width: 320px;
-            max-width: 400px;
+            min-width: 350px;
+            max-width: 420px;
             background: var(--panel-bg);
             border-left: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            transition: all 0.3s ease;
+            backdrop-filter: blur(15px);
         }
 
-        .chat-section.collapsed {
-            display: none;
+        .sidebar-panel {
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
         }
 
+        .panel-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255,255,255,0.4);
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        /* Adjustment Control Tools Layout */
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .tool-btn-group {
+            display: flex;
+            background: rgba(255,255,255,0.04);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .tool-btn-group button {
+            background: transparent;
+            padding: 6px 12px;
+            border-radius: 0;
+        }
+
+        .tool-btn-group button:hover {
+            background: rgba(255,255,255,0.08);
+        }
+
+        .tool-label {
+            font-size: 0.8rem;
+            padding: 0 4px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        /* Chat Logs Engine */
         .chat-messages {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 15px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
-        }
-
-        /* Fixes Text Overflow: Keeps long strings from breaking layout mechanics */
-        .message-bubble {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 10px 14px;
-            border-radius: 12px;
-            word-break: break-word; /* Forces long text segments to wrap elegantly */
-            max-width: 100%;
-        }
-
-        .message-author {
-            font-size: 0.8rem;
-            color: var(--accent-color);
-            margin-bottom: 4px;
-            font-weight: bold;
-        }
-
-        /* Text input panels */
-        .input-bar {
-            padding: 15px;
-            background: rgba(0, 0, 0, 0.2);
-            border-top: 1px solid var(--border-color);
-            display: flex;
             gap: 10px;
         }
 
-        input[type="text"] {
-            flex: 1;
-            background: rgba(255, 255, 255, 0.07);
-            border: 1px solid var(--border-color);
-            padding: 10px 15px;
-            border-radius: 8px;
-            color: #fff;
-            outline: none;
-            text-overflow: ellipsis; /* Shrinks hyper-long URLs with an elegant ... */
-            white-space: nowrap;
-            overflow: hidden;
-        }
-
-        input[type="text"]:focus {
-            border-color: var(--accent-color);
-            white-space: normal; /* Restores visibility on click */
-        }
-
-        button {
-            background: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 10px 18px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-
-        /* 📱 Mobile Layout Engine Overhaul */
-        @media (max-width: 768px) {
-            .app-container {
-                flex-direction: column;
-                overflow-y: auto;
-            }
-
-            .video-section {
-                flex: none;
-                width: 100%;
-                position: sticky;
-                top: 0;
-                z-index: 10;
-            }
-
-            .chat-section {
-                flex: 1;
-                max-width: 100%;
-                min-width: 100%;
-                height: 50vh;
-                border-left: none;
-                border-top: 1px solid var(--border-color);
-            }
-        }
-
-        /* Scrollbar Stylings */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.15);
+        .message-bubble {
+            background: rgba(255, 255, 255, 0.04);
+            padding: 8px 12px;
             border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.02);
+            word-break: break-word;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 4px;
+        }
+
+        .message-author {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .message-time {
+            color: rgba(255,255,255,0.3);
+        }
+
+        /* Latency Realtime Counter Badge */
+        .latency-badge {
+            background: var(--sync-color);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            display: none;
+            margin-left: 8px;
+        }
+
+        /* Custom Input Styling overrides for file mapping */
+        .file-upload-btn {
+            position: relative;
+            overflow: hidden;
+            background: rgba(255,255,255,0.05);
+            border: 1px dashed var(--border-color);
+            text-align: center;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .file-upload-btn input[type="file"] {
+            position: absolute;
+            left: 0; top: 0; opacity: 0; width: 100%; height: 100%;
+            cursor: pointer;
+        }
+
+        /* =========================================================================
+           FULLSCREEN CANVAS LAYER INJECTIONS (Targeted inside active Plyr instances)
+           ========================================================================= */
+        .plyr-fullscreen-toast-layer {
+            position: absolute;
+            bottom: 90px;
+            right: 25px;
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .floating-toast {
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            padding: 10px 14px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 0.9rem;
+            word-break: break-word;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            border-left: 4px solid var(--accent-color);
+            animation: toastSequence 5s forwards;
+        }
+
+        @keyframes toastSequence {
+            0% { transform: translateY(25px) scale(0.95); opacity: 0; }
+            8% { transform: translateY(0) scale(1); opacity: 1; }
+            92% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-20px); opacity: 0; }
+        }
+
+        /* Auto-Lifting Glassmorphic Fullscreen Overlay Box */
+        .plyr-fullscreen-input-layer {
+            position: absolute;
+            bottom: 80px;
+            right: 25px;
+            width: 320px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            padding: 12px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+            z-index: 11;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+        }
+
+        /* Automatic Layout Sync: Drops away smoothly when control tracking idles out */
+        .plyr--hide-controls .plyr-fullscreen-input-layer {
+            transform: translateY(75px);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Native Plyr Overrides for Subtitle Customization Variables */
+        .plyr__captions {
+            font-size: var(--sub-size-val, 16px) !important;
+            opacity: var(--sub-opacity-val, 1) !important;
+            transform: translateY(var(--sub-pos-val, 0px)) !important;
+            transition: all 0.1s ease;
+        }
+
+        /* Custom control injection classes */
+        .plyr__controls .plyr-chat-dropdown-trigger {
+            position: relative;
+        }
+
+        /* Responsive Breakpoints */
+        @media (max-width: 900px) {
+            .app-container { flex-direction: column; overflow-y: auto; }
+            .video-section { flex: none; width: 100%; position: sticky; top:0; z-index:10; }
+            .sidebar-section { flex: none; max-width: 100%; min-width: 100%; height: auto; }
+            .top-navbar { flex-direction: column; align-items: stretch; }
         }
     </style>
 </head>
 <body>
 
-    <div class="input-bar" style="background: rgba(20,20,30,0.9);">
-        <input type="text" id="videoUrlInput" placeholder="Paste Direct Dual-Audio/Movie URL Here (.mp4, .m3u8, etc.)">
-        <button onclick="loadNewVideo()">Load Movie</button>
-        <button id="toggleChatBtn" onclick="toggleChatPanel()">💬 Toggle Chat</button>
-    </div>
-
-    <div class="app-container">
-        <div class="video-section">
-            <div class="player-wrapper">
-                <video id="player" playsinline controls>
-                    <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4" />
-                </video>
-            </div>
+    <!-- Upper Dashboard Header Bar -->
+    <div class="top-navbar">
+        <div class="nav-group">
+            <button onclick="createNewRoom()" style="background: rgba(255,255,255,0.08);">🆕 Create New Room</button>
+            <button onclick="shareActiveRoom()" style="background: var(--accent-color);">🔗 Share Invite Link</button>
+        </div>
+        
+        <div class="media-input-wrapper">
+            <input type="text" id="videoUrlInput" placeholder="Paste Direct Streaming Video Asset Address (.mp4, YouTube, or .m3u8 HLS)">
+            <button onclick="loadNewVideo()">Load Content</button>
         </div>
 
-        <div class="chat-section" id="chatPanel">
-            <div class="chat-messages" id="chatLog">
-                <div class="message-bubble">
-                    <div class="message-author">System</div>
-                    Welcome! Copy your current URL path to invite friends to sync securely.
+        <div class="nav-group">
+            <button onclick="requestRoomSync()" style="background: var(--sync-color);">🔄 Sync to Me<span id="latencyBadge" class="latency-badge"></span></button>
+        </div>
+    </div>
+
+    <!-- Interface Workspace Framework Split -->
+    <div class="app-container">
+        
+        <!-- Interactive Player Pipeline Canvas -->
+        <div class="video-section">
+            <div class="player-wrapper" id="videoWrapper">
+                <video id="player" playsinline controls></video>
+                
+                <!-- Dynamic Overlay Elements (Injected programmatically into Plyr on init) -->
+                <div id="toastLayer" class="plyr-fullscreen-toast-layer"></div>
+                
+                <div id="glassInputLayer" class="plyr-fullscreen-input-layer" style="display: none;">
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="fullscreenChatInput" placeholder="Send quick message..." style="flex:1; padding:6px 10px; font-size:0.85rem;">
+                        <button onclick="transmitMessage(true)" style="padding:6px 12px; font-size:0.85rem;">Send</button>
+                    </div>
                 </div>
             </div>
-            <div class="input-bar">
-                <input type="text" id="chatMessageInput" placeholder="Type a message...">
-                <button onclick="sendChatMessage()">Send</button>
+        </div>
+
+        <!-- Sidebar Engine Panel Grid Layout -->
+        <div class="sidebar-section">
+            
+            <!-- Profiles & User Identity Management Block -->
+            <div class="sidebar-panel">
+                <div class="panel-title">User Profile Identification</div>
+                <div style="display: flex; gap:8px; align-items:center;">
+                    <span style="font-size:0.85rem; color:rgba(255,255,255,0.5);">Handle:</span>
+                    <input type="text" id="usernameInput" value="" onchange="updateProfileHandle()" style="flex:1; padding:6px 10px;">
+                </div>
             </div>
+
+            <!-- Precision Subtitle Offsetting & Styler Engine Box -->
+            <div class="sidebar-panel">
+                <div class="panel-title">Subtitle Timing & Presentation Control</div>
+                <div class="control-grid">
+                    
+                    <div class="tool-btn-group">
+                        <button onclick="adjustSubtitleTiming(-0.1)">-</button>
+                        <span class="tool-label" id="lblSubDelay">Timing: 0.0s</span>
+                        <button onclick="adjustSubtitleTiming(0.1)">+</button>
+                    </div>
+
+                    <div class="tool-btn-group">
+                        <button onclick="adjustSubtitleStyling('size', -2)">-</button>
+                        <span class="tool-label" id="lblSubSize">Size: 16px</span>
+                        <button onclick="adjustSubtitleStyling('size', 2)">+</button>
+                    </div>
+
+                    <div class="tool-btn-group">
+                        <button onclick="adjustSubtitleStyling('pos', -5)">-</button>
+                        <span class="tool-label" id="lblSubPos">Lift: 0px</span>
+                        <button onclick="adjustSubtitleStyling('pos', 5)">+</button>
+                    </div>
+
+                    <div class="tool-btn-group">
+                        <button onclick="adjustSubtitleStyling('opacity', -0.1)">-</button>
+                        <span class="tool-label" id="lblSubOpacity">Opacity: 1.0</span>
+                        <button onclick="adjustSubtitleStyling('opacity', 0.1)">+</button>
+                    </div>
+
+                </div>
+                <div class="file-upload-btn" style="margin-top:10px;">
+                    📂 Upload External Subtitle Track (.vtt, .srt)
+                    <input type="file" id="externalSubFile" accept=".vtt,.srt" onchange="ingestExternalSubtitles(this)">
+                </div>
+            </div>
+
+            <!-- Main Conversation Stream Scroll Container -->
+            <div class="chat-messages" id="chatLog"></div>
+
+            <!-- Core Desktop Input Bar Panel -->
+            <div class="sidebar-panel" style="border-bottom:none; border-top:1px solid var(--border-color); background: rgba(0,0,0,0.15);">
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="sidebarChatInput" placeholder="Type a room message...">
+                    <button onclick="transmitMessage(false)">Send</button>
+                </div>
+            </div>
+
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.js"></script>
 
     <script>
         // =========================================================================
-        // CONFIGURATION: INSERT YOUR PUSHER CREDENTIALS HERE
+        // SYSTEM CONFIGURATION PROPERTIES
         // =========================================================================
         const PUSHER_KEY = '25790a5661338b7c7756';
         const PUSHER_CLUSTER = 'ap2';
-        const PUSHER_SECRET = '9a7ffd7b2858442cd939'; // Secure client-side calculator handles this
-        
-        // Setup room based on URL params or auto-generate a secure hash
+        const PUSHER_SECRET = '9a7ffd7b2858442cd939'; 
+
+        // Manage Profile Handles
+        let currentUsername = localStorage.getItem('party_user') || 'Guest_' + Math.floor(1000 + Math.random() * 9000);
+        document.getElementById('usernameInput').value = currentUsername;
+
+        // Auto-Setup Structural Space Parameters
         const urlParams = new URLSearchParams(window.location.search);
         let roomId = urlParams.get('room');
         if (!roomId) {
-            roomId = Math.random().toString(36).substring(2, 15);
+            roomId = Math.random().toString(36).substring(2, 13);
             window.history.pushState({}, '', `?room=${roomId}`);
         }
+
         const channelName = `private-watch-${roomId}`;
-
-        // Initialize Advanced Fluid Video Player Core
-        const player = new Plyr('#player', {
-            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'fullscreen'],
-            ratio: '16:9'
-        });
-
+        
+        // Configuration Engine Variables
         let isSyncing = false;
         let updateTimeout;
+        let hlsInstance = null;
+        let localHeartbeatInterval = null;
+        
+        // Subtitle Offset Vectors
+        let subDelayOffset = 0.0;
+        let subSizePx = 16;
+        let subOpacityFloat = 1.0;
+        let subPositionLift = 0;
 
-        // =========================================================================
-        // PUSHER SERVERLESS PRIVATE HANDSHAKE ENGINE
-        // =========================================================================
+        // Fullscreen Visibility Switches
+        let floatingToastActive = true;
+        let glassInputActive = false;
+
+        // Core HTML Node Targets
+        const videoElement = document.getElementById('player');
+        
+        // Initialize Core View Engine
+        const player = new Plyr(videoElement, {
+            controls: [
+                'play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'fullscreen'
+            ],
+            settings: ['quality', 'speed', 'language', 'audioTrack']
+        });
+
+        // Initialize Secure Pusher Client System Hooks
         const pusher = new Pusher(PUSHER_KEY, {
             cluster: PUSHER_CLUSTER,
             channelAuthorization: {
                 transport: 'ajax',
                 customHandler: function({ socketId, channelName }, callback) {
-                    // Browser-Side Signing Signature Generation
-                    // Emulates a backend server endpoint by computing HMAC-SHA256 locally.
                     const stringToSign = socketId + ":" + channelName;
                     const hash = CryptoJS.HmacSHA256(stringToSign, PUSHER_SECRET);
                     const signature = CryptoJS.enc.Hex.stringify(hash);
-                    
-                    callback(null, {
-                        auth: PUSHER_KEY + ":" + signature
-                    });
+                    callback(null, { auth: PUSHER_KEY + ":" + signature });
                 }
             }
         });
 
-        // Join Room Channel Securely
         const watchChannel = pusher.subscribe(channelName);
 
+        // Inject Fullscreen Overlays directly inside Plyr DOM container once readied
+        player.on('ready', () => {
+            const plyrContainer = document.querySelector('.plyr');
+            if (plyrContainer) {
+                plyrContainer.appendChild(document.getElementById('toastLayer'));
+                plyrContainer.appendChild(document.getElementById('glassInputLayer'));
+                injectCustomPlayerButtons();
+            }
+        });
+
         // =========================================================================
-        // MEDIA SYNC AND COORDINATION EVENT BINDINGS
+        // AUTOMATED DYNAMIC DISCOVERY LOOP (HANDLES INSTANT JOIN CATCHUP)
+        // =========================================================================
+        watchChannel.bind('pusher:subscription_succeeded', () => {
+            appendMessage("System", "Connected to Room Room ID: " + roomId);
+            // Broadcast immediate query discovery request to see if anyone is active
+            setTimeout(() => {
+                watchChannel.trigger('client-request-status', { from: currentUsername });
+            }, 800);
+        });
+
+        watchChannel.bind('client-request-status', (data) => {
+            // Active rooms respond with target state configurations
+            if (player.currentTime > 0.1) {
+                watchChannel.trigger('client-respond-status', {
+                    url: document.getElementById('videoUrlInput').value,
+                    time: player.currentTime,
+                    playing: player.playing
+                });
+            }
+        });
+
+        watchChannel.bind('client-respond-status', (data) => {
+            const currentUrl = document.getElementById('videoUrlInput').value;
+            // Catch up instantly if the current stream context is uninitialized
+            if (!currentUrl && data.url) {
+                document.getElementById('videoUrlInput').value = data.url;
+                processMediaParsing(data.url, () => {
+                    isSyncing = true;
+                    player.currentTime = data.time;
+                    if (data.playing) player.play();
+                    setTimeout(() => { isSyncing = false; }, 600);
+                });
+            }
+        });
+
+        // =========================================================================
+        // STREAM SYNCHRONIZATION EVENT LOOPS & TRACK HARNESSES
         // =========================================================================
         watchChannel.bind('client-video-play', (data) => {
-            if (Math.abs(player.currentTime - data.time) > 1.5) {
+            if (Math.abs(player.currentTime - data.time) > 1.2) {
                 isSyncing = true;
                 player.currentTime = data.time;
             }
             player.play();
-            setTimeout(() => { isSyncing = false; }, 500);
+            setTimeout(() => { isSyncing = false; }, 400);
         });
 
         watchChannel.bind('client-video-pause', (data) => {
             player.pause();
-            if (Math.abs(player.currentTime - data.time) > 1.5) {
+            if (Math.abs(player.currentTime - data.time) > 1.2) {
                 isSyncing = true;
                 player.currentTime = data.time;
-                setTimeout(() => { isSyncing = false; }, 500);
+                setTimeout(() => { isSyncing = false; }, 400);
             }
         });
 
-        watchChannel.bind('client-chat-msg', (data) => {
-            appendMessage(data.user, data.text);
+        watchChannel.bind('client-global-track', (data) => {
+            if (data.type === 'audio' && hlsInstance) {
+                if (hlsInstance.audioTrack !== data.trackId) {
+                    hlsInstance.audioTrack = data.trackId;
+                    appendMessage("System", `Global Audio track forced to index [${data.trackId}]`);
+                }
+            } else if (data.type === 'caption') {
+                player.currentCaption = data.trackId;
+            }
         });
 
-        // Player Actions Trigger Direct, Low-Latency Socket Blasts
+        watchChannel.bind('client-heartbeat', (data) => {
+            if (!player.playing || isSyncing) return;
+            const absoluteDelta = data.time - player.currentTime;
+            const badge = document.getElementById('latencyBadge');
+            
+            if (absoluteDelta > 1.5) {
+                badge.innerText = `${absoluteDelta.toFixed(1)}s late`;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        });
+
+        // Capture internal active playback events
         player.on('play', () => {
             if (isSyncing) return;
             watchChannel.trigger('client-video-play', { time: player.currentTime });
+            startHeartbeatBroadcast();
         });
 
         player.on('pause', () => {
             if (isSyncing) return;
             watchChannel.trigger('client-video-pause', { time: player.currentTime });
+            clearInterval(localHeartbeatInterval);
         });
 
-        // Rate-limiting / Debouncing timeline adjustments to save message quota
         player.on('seeking', () => {
             if (isSyncing) return;
             clearTimeout(updateTimeout);
             updateTimeout = setTimeout(() => {
                 watchChannel.trigger('client-video-play', { time: player.currentTime });
-            }, 300);
+            }, 250);
         });
 
+        // Synchronize Global Language Track Selections
+        player.on('languagechange', () => {
+            if (isSyncing) return;
+            watchChannel.trigger('client-global-track', { type: 'caption', trackId: player.currentCaption });
+        });
+
+        function startHeartbeatBroadcast() {
+            clearInterval(localHeartbeatInterval);
+            localHeartbeatInterval = setInterval(() => {
+                if (player.playing && !isSyncing) {
+                    watchChannel.trigger('client-heartbeat', { time: player.currentTime });
+                }
+            }, 3000);
+        }
+
+        function requestRoomSync() {
+            isSyncing = true;
+            watchChannel.trigger('client-video-play', { time: player.currentTime });
+            document.getElementById('latencyBadge').style.display = 'none';
+            setTimeout(() => { isSyncing = false; }, 400);
+        }
+
         // =========================================================================
-// UI AND UTILITY HELPER FUNCS (UPDATED FOR YOUTUBE SUPPORT)
-// =========================================================================
+        // CORE MEDIA ENGINE STRUCTURAL ROUTING
+        // =========================================================================
+        function loadNewVideo() {
+            const targetUrl = document.getElementById('videoUrlInput').value.trim();
+            if (!targetUrl) return;
+            processMediaParsing(targetUrl);
+        }
 
-// Smart URL extractor to grab the 11-character YouTube video ID
-function getYouTubeId(url) {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-}
+        function processMediaParsing(url, executionCallback = null) {
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+            
+            subDelayOffset = 0.0;
+            document.getElementById('lblSubDelay').innerText = "Timing: 0.0s";
 
-function loadNewVideo() {
-    const url = document.getElementById('videoUrlInput').value.trim();
-    if (!url) return;
-    
-    const ytId = getYouTubeId(url);
-    
-    if (ytId) {
-        // If it's a YouTube link, change the provider type seamlessly
-        player.source = {
-            type: 'video',
-            sources: [{
-                src: ytId,
-                provider: 'youtube', // Tells Plyr to switch to YouTube stream mode
-            }],
-        };
-        appendMessage("System", "Loaded YouTube stream successfully.");
-    } else {
-        // Otherwise, treat it as a direct raw video file link (.mp4, .m3u8, etc.)
-        player.source = {
-            type: 'video',
-            sources: [{ src: url }]
-        };
-        appendMessage("System", "Loaded raw video link successfully.");
-    }
-}
+            const ytRegExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const ytMatch = url.match(ytRegExp);
+            
+            if (ytMatch && ytMatch[2].length === 11) {
+                player.source = {
+                    type: 'video',
+                    sources: [{ src: ytMatch[2], provider: 'youtube' }],
+                };
+                appendMessage("System", "YouTube Asset Stream mapped perfectly.");
+                if(executionCallback) executionCallback();
+            } 
+            else if (url.includes('.m3u8')) {
+                if (Hls.isSupported()) {
+                    hlsInstance = new Hls();
+                    hlsInstance.loadSource(url);
+                    hlsInstance.attachMedia(videoElement);
+                    
+                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                        appendMessage("System", "HLS Multi-Audio Stream Engine initialized mapping channels.");
+                        
+                        // Map HLS audio tracks directly back out to Pusher framework on manual switch
+                        hlsInstance.on(Hls.Events.AUDIO_TRACK_SWITCHED, (ev, data) => {
+                            watchChannel.trigger('client-global-track', { type: 'audio', trackId: data.id });
+                        });
 
-function sendChatMessage() {
-    const input = document.getElementById('chatMessageInput');
-    const msg = input.value.trim();
-    if (!msg) return;
+                        if(executionCallback) executionCallback();
+                    });
+                } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                    videoElement.src = url;
+                    if(executionCallback) executionCallback();
+                }
+            } 
+            else {
+                player.source = {
+                    type: 'video',
+                    sources: [{ src: url }]
+                };
+                appendMessage("System", "Raw File Stream parsed container successfully.");
+                if(executionCallback) executionCallback();
+            }
+        }
 
-    watchChannel.trigger('client-chat-msg', { user: 'Friend', text: msg });
-    appendMessage('You', msg);
-    input.value = '';
-}
+        // =========================================================================
+        // SUBTITLE MANAGEMENT EXTENSION PIPELINES
+        // =========================================================================
+        function ingestExternalSubtitles(uploaderNode) {
+            const nativeFile = uploaderNode.files[0];
+            if (!nativeFile) return;
 
-function appendMessage(user, text) {
-    const log = document.getElementById('chatLog');
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
-    bubble.innerHTML = `<div class="message-author">${user}</div><div>${text}</div>`;
-    log.appendChild(bubble);
-    log.scrollTop = log.scrollHeight;
-}
+            const localBlobUrl = URL.createObjectURL(nativeFile);
+            
+            // Generate clean native track wrapper layer elements
+            const trackNode = document.createElement('track');
+            trackNode.kind = 'captions';
+            trackNode.label = nativeFile.name.replace('.vtt','').replace('.srt','');
+            trackNode.srclang = 'ext';
+            trackNode.src = localBlobUrl;
+            trackNode.default = true;
 
-function toggleChatPanel() {
-    document.getElementById('chatPanel').classList.toggle('collapsed');
-}
+            videoElement.appendChild(trackNode);
+            
+            // Force Plyr text elements to cycle track array structure
+            setTimeout(() => {
+                player.setCaptionsMenu(); 
+                appendMessage("System", "External tracking subtitles injected.");
+            }, 400);
+        }
 
-        // Allow pressing enter key to transmit chats instantly
-        document.getElementById('chatMessageInput').addEventListener('keydown', (e) => {
-            if(e.key === 'Enter') sendChatMessage();
+        function adjustSubtitleTiming(stepDelta) {
+            subDelayOffset += stepDelta;
+            document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
+            
+            // Cycle active TextTrack descriptors to calculate shifted runtime maps
+            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                let currentTrack = videoElement.textTracks[i];
+                if (currentTrack.cues) {
+                    for (let j = 0; j < currentTrack.cues.length; j++) {
+                        let singleCue = currentTrack.cues[j];
+                        if (!singleCue.baseStart) {
+                            singleCue.baseStart = singleCue.startTime;
+                            singleCue.baseEnd = singleCue.endTime;
+                        }
+                        singleCue.startTime = singleCue.baseStart + subDelayOffset;
+                        singleCue.endTime = singleCue.baseEnd + subDelayOffset;
+                    }
+                }
+            }
+        }
+
+        function adjustSubtitleStyling(property, modificationDelta) {
+            const element = document.querySelector('.plyr');
+            if(!element) return;
+
+            if (property === 'size') {
+                subSizePx = Math.max(10, Math.min(42, subSizePx + modificationDelta));
+                element.style.setProperty('--sub-size-val', `${subSizePx}px`);
+                document.getElementById('lblSubSize').innerText = `Size: ${subSizePx}px`;
+            } else if (property === 'pos') {
+                subPositionLift += modificationDelta;
+                element.style.setProperty('--sub-pos-val', `${subPositionLift}px`);
+                document.getElementById('lblSubPos').innerText = `Lift: ${subPositionLift}px`;
+            } else if (property === 'opacity') {
+                subOpacityFloat = Math.max(0.1, Math.min(1.0, subOpacityFloat + modificationDelta));
+                element.style.setProperty('--sub-opacity-val', subOpacityFloat.toFixed(1));
+                document.getElementById('lblSubOpacity').innerText = `Opacity: ${subOpacityFloat.toFixed(1)}`;
+            }
+        }
+
+        // =========================================================================
+        // MESSAGING & DISPLAY PRESENTATION CANVAS LOOPS
+        // =========================================================================
+        watchChannel.bind('client-chat-msg', (data) => {
+            appendMessage(data.user, data.text);
+            if (floatingToastActive) {
+                renderFloatingFullscreenToast(data.user, data.text);
+            }
+        });
+
+        function transmitMessage(isFullscreenSource) {
+            const inputField = isFullscreenSource ? document.getElementById('fullscreenChatInput') : document.getElementById('sidebarChatInput');
+            const plaintext = inputField.value.trim();
+            if (!plaintext) return;
+
+            watchChannel.trigger('client-chat-msg', { user: currentUsername, text: plaintext });
+            appendMessage(currentUsername + ' (You)', plaintext);
+            
+            if (isFullscreenSource && floatingToastActive) {
+                renderFloatingFullscreenToast(currentUsername + ' (You)', plaintext);
+            }
+
+            inputField.value = '';
+        }
+
+        function appendMessage(author, string) {
+            const textPanel = document.getElementById('chatLog');
+            const containerBubble = document.createElement('div');
+            containerBubble.className = 'message-bubble';
+            
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            containerBubble.innerHTML = `
+                <div class="message-header">
+                    <span class="message-author">${author}</span>
+                    <span class="message-time">${timestamp}</span>
+                </div>
+                <div>${string}</div>
+            `;
+            
+            textPanel.appendChild(containerBubble);
+            textPanel.scrollTop = textPanel.scrollHeight;
+        }
+
+        function renderFloatingFullscreenToast(sender, payload) {
+            const toastFrame = document.getElementById('toastLayer');
+            const individualToast = document.createElement('div');
+            individualToast.className = 'floating-toast';
+            individualToast.innerHTML = `<strong>${sender}:</strong> ${payload}`;
+            
+            toastFrame.appendChild(individualToast);
+            
+            // Delete element node out of resource space cleanly once animation terminates
+            setTimeout(() => {
+                individualToast.remove();
+            }, 5000);
+        }
+
+        // =========================================================================
+        // APPLICATION INTERFACE HOOK TRIGGERS
+        // =========================================================================
+        function updateProfileHandle() {
+            const inputVal = document.getElementById('usernameInput').value.trim();
+            if(inputVal) {
+                currentUsername = inputVal;
+                localStorage.setItem('party_user', currentUsername);
+                appendMessage("System", `Changed your handle to: ${currentUsername}`);
+            }
+        }
+
+        function createNewRoom() {
+            const secureUniqueId = Math.random().toString(36).substring(2, 13);
+            window.location.href = `?room=${secureUniqueId}`;
+        }
+
+        function shareActiveRoom() {
+            const targetInviteUrl = window.location.href;
+            navigator.clipboard.writeText(targetInviteUrl).then(() => {
+                appendMessage("System", "Invite URL path copied to clipboard buffer.");
+                if (navigator.share) {
+                    navigator.share({
+                        title: 'Watch Party Invite',
+                        url: targetInviteUrl
+                    }).catch(() => {});
+                } else {
+                    alert("Link copied! Send it to your friend: " + targetInviteUrl);
+                }
+            });
+        }
+
+        function injectCustomPlayerButtons() {
+            const controlsGrid = document.querySelector('.plyr__controls');
+            if (!controlsGrid) return;
+
+            // Generate customized interaction switches inside native bar space
+            const secondaryContainer = document.createElement('div');
+            secondaryContainer.style.display = 'flex';
+            secondaryContainer.style.alignItems = 'center';
+            secondaryContainer.className = 'plyr__controls__item';
+            
+            secondaryContainer.innerHTML = `
+                <select id="plyrCustomOverlayControl" style="background:#23242f; padding:2px 6px; font-size:0.75rem; border-radius:4px; border:1px solid rgba(255,255,255,0.2); margin-left:8px;">
+                    <option value="both">Chat Options</option>
+                    <option value="toast_toggle">Floating Texts: On</option>
+                    <option value="input_toggle">Glass Input: Off</option>
+                </select>
+            `;
+
+            controlsGrid.appendChild(secondaryContainer);
+
+            document.getElementById('plyrCustomOverlayControl').addEventListener('change', function(e) {
+                const choice = e.target.value;
+                if(choice === 'toast_toggle') {
+                    floatingToastActive = !floatingToastActive;
+                    this.options[1].text = `Floating Texts: ${floatingToastActive ? 'On' : 'Off'}`;
+                } else if(choice === 'input_toggle') {
+                    glassInputActive = !glassInputActive;
+                    document.getElementById('glassInputLayer').style.display = glassInputActive ? 'block' : 'none';
+                    this.options[2].text = `Glass Input: ${glassInputActive ? 'On' : 'Off'}`;
+                }
+                this.value = 'both'; // Shift target index reset
+            });
+        }
+
+        // Catch enter key events across inputs
+        document.getElementById('sidebarChatInput').addEventListener('keydown', (e) => {
+            if(e.key === 'Enter') transmitMessage(false);
+        });
+        document.getElementById('fullscreenChatInput').addEventListener('keydown', (e) => {
+            if(e.key === 'Enter') transmitMessage(true);
         });
     </script>
 </body>
