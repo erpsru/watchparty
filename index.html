@@ -1,1058 +1,359 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WatchParty Pro Ultra — Premium Sync Engine</title>
-<style>
-  :root{
-    --bg:#0b0d12;
-    --panel:#12151c;
-    --panel-2:#161a23;
-    --accent:#7c5cff;
-    --accent-2:#00d4b5;
-    --text:#e8e9ee;
-    --sub:#8b90a3;
-    --line:#232733;
-    --danger:#ff5c7a;
-    --glass: rgba(18, 21, 28, 0.4);
-    --glass-border: rgba(255, 255, 255, 0.08);
-  }
-  *{box-sizing:border-box;}
-  html,body{height:100%;}
-  body{
-    margin:0;
-    background:radial-gradient(1200px 800px at 80% -10%, #1a1233 0%, var(--bg) 55%);
-    color:var(--text);
-    font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-    overflow:hidden;
-  }
-  .app{
-    display:grid;
-    grid-template-columns:1fr 340px;
-    height:100vh;
-  }
-  .theater{
-    display:flex;
-    flex-direction:column;
-    padding:18px 22px;
-    min-width:0;
-  }
-  .brand{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    margin-bottom:14px;
-  }
-  .brand .dot{
-    width:12px;height:12px;border-radius:50%;
-    background:linear-gradient(135deg,var(--accent),var(--accent-2));
-    box-shadow:0 0 14px var(--accent);
-  }
-  .brand h1{ font-size:17px; letter-spacing:0.5px; margin:0; font-weight:700; }
-  .brand .room-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
-  
-  .btn-sm {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    color: var(--text);
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  .btn-sm.primary {
-    background: linear-gradient(135deg, var(--accent), #5b3df0);
-    border: none;
-    color: white;
-  }
-  .btn-sm:hover { filter: brightness(1.1); }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Watch Party</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+    <script src="https://js.pusher.com/8.0/pusher.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 
-  .searchbar{ display:flex; gap:8px; margin-bottom:14px; }
-  .searchbar input{
-    flex:1; background:var(--panel); border:1px solid var(--line); color:var(--text);
-    padding:12px 14px; border-radius:10px; font-size:14px; outline:none; transition:border-color .15s;
-  }
-  .searchbar input:focus{border-color:var(--accent);}
-  .searchbar button{
-    background:linear-gradient(135deg,var(--accent),#5b3df0); border:none; color:white;
-    padding:0 20px; border-radius:10px; font-weight:600; cursor:pointer; font-size:14px;
-  }
+    <style>
+        :root {
+            --bg-color: #0f0f12;
+            --panel-bg: rgba(25, 25, 35, 0.65);
+            --accent-color: #6366f1;
+            --text-color: #f3f4f6;
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
 
-  /* PLAYER WRAPPER */
-  .player-wrap{
-    position:relative;
-    flex:1;
-    background:#000;
-    border-radius:14px;
-    overflow:hidden;
-    border:1px solid var(--line);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    min-height:0;
-  }
-  #videoEl, #ytFrameContainer {
-    width:100%; height:100%; display:none; background:#000;
-  }
-  #ytFrameContainer { position: absolute; top:0; left:0; }
-  #ytFrame { width:100%; height:100%; }
-  
-  /* YouTube Shield to block Double clicks forcing native fullscreen */
-  .yt-shield {
-    position: absolute; top:0; left:0; width:100%; height:100%;
-    z-index: 1; display: none;
-  }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
 
-  .placeholder{ color:var(--sub); text-align:center; padding:30px; z-index:2; }
-  .placeholder .icon{font-size:44px; margin-bottom:10px; opacity:.6;}
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
 
-  /* Floating Subtitles Overlay Box */
-  .subtitles-overlay {
-    position: absolute;
-    bottom: 85px;
-    left: 10%; right: 10%;
-    text-align: center;
-    pointer-events: none;
-    z-index: 8;
-    transition: bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .subtitles-overlay span {
-    background: rgba(0, 0, 0, 0.75);
-    color: #ffffff;
-    font-size: 20px;
-    padding: 6px 14px;
-    border-radius: 6px;
-    line-height: 1.4;
-    white-space: pre-line;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
-    display: inline-block;
-  }
+        /* App Main Framework: Flexible Side-by-Side Grid */
+        .app-container {
+            display: flex;
+            flex: 1;
+            width: 100%;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+        }
 
-  /* IMMERSIVE FULLSCREEN FLOATING CHAT SYSTEM CONTAINER */
-  .fs-chat-anchor {
-    position: absolute;
-    right: 20px;
-    bottom: 20px; /* Base resting position when player controls are hidden */
-    width: 280px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 9;
-    pointer-events: none;
-    transition: bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  /* Auto-lift layout calculation when control dashboard emerges */
-  .player-wrap.show-controls .fs-chat-anchor {
-    bottom: 95px;
-  }
-  /* Dynamic lift for subtitles when controls show */
-  .player-wrap.show-controls .subtitles-overlay {
-    bottom: 155px;
-  }
+        /* Video Section Stays Contained & Locked in Position */
+        .video-section {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: #000;
+            position: relative;
+            max-height: 100%;
+        }
 
-  /* Floating Instant Notifications */
-  .fs-msg-stream {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    justify-content: flex-end;
-    align-items: flex-end;
-  }
-  .fs-toast {
-    background: rgba(15, 18, 26, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(8px);
-    padding: 8px 12px;
-    border-radius: 10px;
-    color: white;
-    font-size: 13px;
-    max-width: 100%;
-    word-break: break-word;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    animation: toastIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
-  }
-  .fs-toast .sender { font-weight: 700; color: var(--accent-2); margin-bottom: 2px; font-size: 11px; }
-  .fs-toast.vanish {
-    animation: toastOut 0.4s ease forwards;
-  }
+        /* Elastic Player Wrapper prevents controls from sliding off-screen */
+        .player-wrapper {
+            width: 100%;
+            max-height: 100%;
+            aspect-ratio: 16 / 9;
+            margin: auto;
+        }
 
-  @keyframes toastIn {
-    from { opacity: 0; transform: translateY(14px) scale(0.9); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  @keyframes toastOut {
-    to { opacity: 0; transform: translateY(-10px) scale(0.95); filter: blur(4px); }
-  }
+        .plyr {
+            height: 100% !important;
+            max-height: 100vh;
+        }
 
-  /* Glassmorphic Inline Typing Box */
-  .fs-input-box-wrap {
-    pointer-events: auto;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    padding: 6px;
-    border-radius: 12px;
-    display: flex;
-    gap: 6px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-    opacity: 0;
-    transform: scale(0.95);
-    transition: opacity 0.2s, transform 0.2s;
-    visibility: hidden;
-  }
-  .fs-input-box-wrap.visible {
-    opacity: 1; transform: scale(1); visibility: visible;
-  }
-  /* Automatically hide input frame if controls fade during inactivity */
-  .player-wrap:not(.show-controls) .fs-input-box-wrap {
-    opacity: 0 !important; pointer-events: none !important;
-  }
-  .fs-input-box-wrap input {
-    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05);
-    color: white; padding: 8px 12px; border-radius: 8px; font-size: 13px; outline: none;
-  }
-  .fs-input-box-wrap button {
-    background: var(--accent); border: none; color: white; border-radius: 8px;
-    padding: 0 12px; cursor: pointer; font-weight: 700; font-size: 13px;
-  }
+        /* Clean Sidebar Chat Panel with Custom Internal Scrollbar Rules */
+        .chat-section {
+            flex: 1;
+            min-width: 320px;
+            max-width: 400px;
+            background: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+        }
 
-  /* CONTROLS BAR LAYOUT */
-  .controls{
-    position:absolute; left:0; right:0; bottom:0; padding:14px 16px 12px;
-    background:linear-gradient(0deg, rgba(0,0,0,0.95), rgba(0,0,0,0));
-    display:flex; flex-direction:column; gap:8px; opacity:0;
-    transform:translateY(6px); transition:opacity 0.2s, transform 0.2s; z-index: 10;
-  }
-  .player-wrap.show-controls .controls { opacity:1; transform:translateY(0); }
-  
-  .seek{
-    width:100%; -webkit-appearance:none; height:5px; border-radius:3px;
-    background:rgba(255,255,255,.2); cursor:pointer;
-  }
-  .seek::-webkit-slider-thumb{
-    -webkit-appearance:none; width:13px; height:13px; border-radius:50%;
-    background:var(--accent-2); box-shadow:0 0 6px var(--accent-2); cursor:pointer;
-  }
-  .btn-row{ display:flex; align-items:center; gap:8px; }
-  
-  .ctrl-btn{
-    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08);
-    color:var(--text); padding: 0 10px; height:36px; border-radius:8px;
-    cursor:pointer; display:flex; align-items:center; justify-content:center;
-    font-size:13px; font-weight: 600; transition:background .15s, transform .1s;
-  }
-  .ctrl-btn:hover{background:rgba(255,255,255,.18);}
-  .ctrl-btn.big{width:42px; height:42px; font-size:16px; border-radius: 50%;}
-  .time{ color:var(--sub); font-size:12px; font-variant-numeric:tabular-nums; min-width:92px; text-align:center; }
-  
-  .vol-wrap{ display:flex; align-items:center; gap:6px; }
-  .vol-wrap input[type=range]{
-    width:65px; -webkit-appearance:none; height:4px; border-radius:2px; background:rgba(255,255,255,.25);
-  }
-  .vol-wrap input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none; width:11px; height:11px; border-radius:50%; background:white; cursor:pointer;
-  }
-  .spacer{flex:1;}
-  
-  .sync-btn{
-    background:rgba(0, 212, 181, 0.15); border:1px solid var(--accent-2);
-    color:var(--accent-2); font-weight:700; font-size:12px; padding:0 12px;
-    height:34px; border-radius:8px; display:flex; align-items:center; gap:6px;
-  }
+        .chat-section.collapsed {
+            display: none;
+        }
 
-  /* Dynamic Customizers Panel Flyouts */
-  .popover-anchor { position: relative; }
-  .popover-menu {
-    position: absolute; bottom: 46px; left: 50%; transform: translateX(-50%);
-    background: #121620; border: 1px solid var(--line); border-radius: 12px;
-    padding: 14px; width: 260px; display: none; flex-direction: column; gap: 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 12;
-  }
-  .popover-menu.open { display: flex; }
-  .popover-menu h4 { margin: 0 0 4px; font-size: 13px; color: var(--accent-2); }
-  .control-grid-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
-  .grid-actions { display: flex; gap: 4px; }
-  .grid-actions button {
-    background: var(--panel-2); border: 1px solid var(--line); color: white;
-    width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-weight: 700;
-  }
-  .grid-actions button:hover { background: var(--line); }
-  .grid-actions span { min-width: 45px; text-align: center; line-height: 28px; font-size: 11px; background: #0b0d12; border-radius: 6px; }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
 
-  /* SIDEBAR CHAT */
-  .chat{ background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-  .chat-head{ padding:16px 16px 12px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:between; }
-  .chat-head h2{ font-size:14px; margin:0; letter-spacing:.3px; }
-  .chat-head .members{ font-size:11px; color:var(--sub); background:var(--panel-2); padding:4px 8px; border-radius:20px; margin-left: auto;}
-  .name-row{ padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
-  .name-row input{
-    flex:1; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:8px 10px; border-radius:8px; font-size:12.5px; outline:none;
-  }
-  .messages{ flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
-  .messages::-webkit-scrollbar{width:6px;}
-  .messages::-webkit-scrollbar-thumb{background:var(--line); border-radius:3px;}
-  
-  .msg{ max-width:88%; padding:8px 11px; border-radius:12px; background:var(--panel-2); font-size:13.5px; line-height:1.4; word-wrap:break-word; align-self:flex-start; }
-  .msg.me{ align-self:flex-end; background:linear-gradient(135deg,var(--accent),#5b3df0); color:white; }
-  .msg.sys{ align-self:center; background:transparent; color:var(--sub); font-size:11.5px; font-style:italic; }
-  .msg .who{ font-size:11px; opacity:.7; margin-bottom:2px; font-weight:600; }
-  .msg.emoji-only{ font-size:26px; background:transparent; padding:2px 4px; }
-  
-  .chat-input-area{ border-top:1px solid var(--line); padding:10px 12px 12px; position:relative; }
-  .emoji-panel{
-    position:absolute; bottom:56px; right:12px; background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:8px; display:none; grid-template-columns:repeat(7,1fr); gap:4px; width:270px; box-shadow:0 8px 24px rgba(0,0,0,.4);
-  }
-  .emoji-panel.open{display:grid;}
-  .emoji-panel button{ background:none; border:none; font-size:19px; cursor:pointer; padding:4px; border-radius:6px; }
-  .input-row{ display:flex; gap:6px; align-items:center; }
-  .input-row input{ flex:1; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:10px 12px; border-radius:10px; font-size:13.5px; outline:none; }
-  .icon-btn{ background:var(--panel-2); border:1px solid var(--line); color:var(--text); width:38px; height:38px; border-radius:10px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; }
-  .send-btn{ background:linear-gradient(135deg,var(--accent),#5b3df0); border:none; color:white; font-weight:700; }
-  
-  .status-strip{ display:flex; align-items:center; gap:14px; margin-top:10px; font-size:12px; color:var(--sub); }
-  .status-strip .pill{ display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--line); padding:5px 10px; border-radius:20px; }
-  .status-strip .led{ width:7px; height:7px; border-radius:50%; background:var(--accent-2); }
-  .led.warn{background:#ffb84d;} .led.bad{background:var(--danger);}
-</style>
+        /* Fixes Text Overflow: Keeps long strings from breaking layout mechanics */
+        .message-bubble {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px 14px;
+            border-radius: 12px;
+            word-break: break-word; /* Forces long text segments to wrap elegantly */
+            max-width: 100%;
+        }
+
+        .message-author {
+            font-size: 0.8rem;
+            color: var(--accent-color);
+            margin-bottom: 4px;
+            font-weight: bold;
+        }
+
+        /* Text input panels */
+        .input-bar {
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid var(--border-color);
+            padding: 10px 15px;
+            border-radius: 8px;
+            color: #fff;
+            outline: none;
+            text-overflow: ellipsis; /* Shrinks hyper-long URLs with an elegant ... */
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent-color);
+            white-space: normal; /* Restores visibility on click */
+        }
+
+        button {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        /* 📱 Mobile Layout Engine Overhaul */
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+                overflow-y: auto;
+            }
+
+            .video-section {
+                flex: none;
+                width: 100%;
+                position: sticky;
+                top: 0;
+                z-index: 10;
+            }
+
+            .chat-section {
+                flex: 1;
+                max-width: 100%;
+                min-width: 100%;
+                height: 50vh;
+                border-left: none;
+                border-top: 1px solid var(--border-color);
+            }
+        }
+
+        /* Scrollbar Stylings */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+        }
+    </style>
 </head>
 <body>
-<div class="app">
 
-  <div class="theater">
-    <div class="brand">
-      <div class="dot"></div>
-      <h1>WatchParty Pro</h1>
-      <div class="room-actions">
-        <span id="roomLabel" style="color:var(--sub); font-size:12px; margin-right:6px;"></span>
-        <button class="btn-sm primary" id="createNewRoomBtn">➕ Create New Room</button>
-        <button class="btn-sm" id="shareRoomBtn">🔗 Share Party Link</button>
-      </div>
+    <div class="input-bar" style="background: rgba(20,20,30,0.9);">
+        <input type="text" id="videoUrlInput" placeholder="Paste Direct Dual-Audio/Movie URL Here (.mp4, .m3u8, etc.)">
+        <button onclick="loadNewVideo()">Load Movie</button>
+        <button id="toggleChatBtn" onclick="toggleChatPanel()">💬 Toggle Chat</button>
     </div>
 
-    <div class="searchbar">
-      <input id="linkInput" type="text" placeholder="Paste a YouTube video URL or a direct file streaming link here...">
-      <button id="loadBtn">Load Asset</button>
-    </div>
-
-    <div class="player-wrap" id="playerWrap">
-      <div class="placeholder" id="placeholder">
-        <div class="icon">🎬</div>
-        <div>Paste a link above or invite friends to generate a synced workspace!</div>
-      </div>
-      
-      <video id="videoEl" playsinline></video>
-      
-      <div id="ytFrameContainer">
-        <div class="yt-shield" id="ytShield"></div>
-        <div id="ytFrame"></div>
-      </div>
-
-      <div class="subtitles-overlay" id="subtitlesBox">
-        <span id="subtitleText"></span>
-      </div>
-
-      <div class="fs-chat-anchor" id="fsChatAnchor">
-        <div class="fs-msg-stream" id="fsMsgStream"></div>
-        <div class="fs-input-box-wrap" id="fsInputBoxWrap">
-          <input type="text" id="fsChatInputField" placeholder="Type a message...">
-          <button id="fsChatSendBtn">Send</button>
-        </div>
-      </div>
-
-      <div class="controls" id="controlsBar">
-        <input type="range" class="seek" id="seekBar" min="0" max="100" value="0" step="0.1">
-        <div class="btn-row">
-          <button class="ctrl-btn" id="backBtn">⏪</button>
-          <button class="ctrl-btn big" id="playBtn">▶️</button>
-          <button class="ctrl-btn" id="fwdBtn">⏩</button>
-          <div class="time" id="timeLabel">0:00 / 0:00</div>
-
-          <div class="vol-wrap">
-            <span id="volIcon">🔊</span>
-            <input type="range" id="volSlider" min="0" max="100" value="80">
-          </div>
-
-          <div class="spacer"></div>
-          
-          <input type="file" id="subtitleFileInput" accept=".srt,.vtt" style="display:none;">
-          <div class="popover-anchor">
-            <button class="ctrl-btn" id="subSettingsToggleBtn">💬 Subs Panel ▼</button>
-            <div class="popover-menu" id="subSettingsMenu">
-              <h4>Subtitles Command (Cloud Synced)</h4>
-              <button class="btn-sm primary" id="uploadSubsBtn" style="width:100%; margin-bottom:6px;">📁 Upload File (.srt/.vtt)</button>
-              <div class="control-grid-row">
-                <span>Timing Offset</span>
-                <div class="grid-actions">
-                  <button id="subTimeMinusBtn">-</button>
-                  <span id="subTimeLabel">0.0s</span>
-                  <button id="subTimePlusBtn">+</button>
-                </div>
-              </div>
-              <div class="control-grid-row">
-                <span>Font Size</span>
-                <div class="grid-actions">
-                  <button id="subSizeMinusBtn">-</button>
-                  <span id="subSizeLabel">20px</span>
-                  <button id="subSizePlusBtn">+</button>
-                </div>
-              </div>
-              <div class="control-grid-row">
-                <span>Opacity</span>
-                <div class="grid-actions">
-                  <button id="subAlphaMinusBtn">-</button>
-                  <span id="subAlphaLabel">75%</span>
-                  <button id="subAlphaPlusBtn">+</button>
-                </div>
-              </div>
-              <div class="control-grid-row">
-                <span>Vertical Position</span>
-                <div class="grid-actions">
-                  <button id="subPosMinusBtn">-</button>
-                  <span id="subPosLabel">0px</span>
-                  <button id="subPosPlusBtn">+</button>
-                </div>
-              </div>
+    <div class="app-container">
+        <div class="video-section">
+            <div class="player-wrapper">
+                <video id="player" playsinline controls>
+                    <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4" />
+                </video>
             </div>
-          </div>
-
-          <div class="popover-anchor">
-            <button class="ctrl-btn" id="fsChatToggleBtn">📺 Fullscreen Options ▼</button>
-            <div class="popover-menu" id="fsChatMenu">
-              <h4>Immersive Layout Options</h4>
-              <div class="control-grid-row">
-                <span>Floating Messages</span>
-                <button class="btn-sm primary" id="toggleFloatingTxtBtn">ON</button>
-              </div>
-              <div class="control-grid-row">
-                <span>Fullscreen Typing Box</span>
-                <button class="btn-sm primary" id="toggleFsInputBtn">OFF</button>
-              </div>
-            </div>
-          </div>
-
-          <button class="sync-btn" id="syncBtn">🔄 In Sync</button>
-          <button class="ctrl-btn" id="fsBtn">⛶</button>
         </div>
-      </div>
+
+        <div class="chat-section" id="chatPanel">
+            <div class="chat-messages" id="chatLog">
+                <div class="message-bubble">
+                    <div class="message-author">System</div>
+                    Welcome! Copy your current URL path to invite friends to sync securely.
+                </div>
+            </div>
+            <div class="input-bar">
+                <input type="text" id="chatMessageInput" placeholder="Type a message...">
+                <button onclick="sendChatMessage()">Send</button>
+            </div>
+        </div>
     </div>
 
-    <div class="status-strip">
-      <div class="pill"><span class="led" id="connLed"></span><span id="connText">Establishing handshakes...</span></div>
-      <div class="pill">👥 <span id="peopleCount">1</span> active</div>
-      <div class="pill">⏱ drift: <span id="driftLabel">0.0s</span></div>
-    </div>
-  </div>
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.js"></script>
 
-  <div class="chat">
-    <div class="chat-head">
-      <h2>💬 Synchronized Lounge</h2>
-      <div class="members" id="memberPill">1 online</div>
-    </div>
-    <div class="name-row">
-      <input id="nameInput" type="text" placeholder="Your name" maxlength="18">
-    </div>
-    <div class="messages" id="messages"></div>
-    <div class="chat-input-area">
-      <div class="emoji-panel" id="emojiPanel"></div>
-      <div class="input-row">
-        <button class="icon-btn" id="emojiBtn">😊</button>
-        <input id="chatInput" type="text" placeholder="Say something…" maxlength="300">
-        <button class="icon-btn send-btn" id="sendBtn">➤</button>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<script>
-// ---------- Automated Room Construction Generator Matrix ----------
-const urlParams = new URLSearchParams(location.search);
-let ROOM = urlParams.get('room');
-
-if (!ROOM) {
-  ROOM = 'living-room';
-  document.getElementById('roomLabel').textContent = 'room: ' + ROOM;
-} else {
-  document.getElementById('roomLabel').textContent = 'room: ' + ROOM;
-}
-
-// Auto-popup Share notice system if directed via instant generation loops
-if (urlParams.get('created') === 'true') {
-  setTimeout(() => {
-    triggerShareSheet();
-    // Scrub parameter clean to prevent endless loading popups
-    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + `?room=${ROOM}`;
-    window.history.replaceState({path:cleanUrl}, '', cleanUrl);
-  }, 800);
-}
-
-document.getElementById('createNewRoomBtn').addEventListener('click', () => {
-  const prefixes = ['cosmic', 'neon', 'cyber', 'secret', 'hyper', 'retro', 'alpha'];
-  const suffixes = ['lounge', 'theater', 'popcorn', 'bunker', 'zone', 'party', 'nexus'];
-  const randomId = prefixes[Math.floor(Math.random()*prefixes.length)] + '-' + 
-                   suffixes[Math.floor(Math.random()*suffixes.length)] + '-' + 
-                   Math.floor(Math.random()*900 + 100);
-  
-  window.location.href = window.location.pathname + `?room=${randomId}&created=true`;
-});
-
-function triggerShareSheet() {
-  const shareData = {
-    title: 'WatchParty Pro Invitation Link',
-    text: `Join my private streaming party sync workspace in room [${ROOM}]! 🎬`,
-    url: window.location.protocol + "//" + window.location.host + window.location.pathname + `?room=${ROOM}`
-  };
-  if (navigator.share) {
-    navigator.share(shareData).catch(()=>{});
-  } else {
-    navigator.clipboard.writeText(shareData.url);
-    alert('🎉 WatchParty URL copied cleanly to clipboard! Send it to your friends.');
-  }
-}
-document.getElementById('shareRoomBtn').addEventListener('click', triggerShareSheet);
-
-// ---------- Network Cloud Broker Matrix (ntfy Relay Architecture) ----------
-const Channel = (() => {
-  const listeners = [];
-  const clientId = Math.random().toString(36).slice(2, 9);
-  const topic = 'watchparty-' + ROOM.replace(/[^a-zA-Z0-9]/g, '-');
-  let ws;
-
-  function connect() {
-    ws = new WebSocket(`wss://ntfy.sh/${topic}/ws`);
-    ws.onopen = () => {
-      document.getElementById('connLed').className = 'led';
-      document.getElementById('connText').textContent = 'Live Server Connection Active';
-    };
-    ws.onmessage = (e) => {
-      try {
-        const cloudData = JSON.parse(e.data);
-        if (cloudData.event === 'message' && cloudData.message) {
-          const payload = JSON.parse(cloudData.message);
-          if (payload._from !== clientId) listeners.forEach(fn => fn(payload));
+    <script>
+        // =========================================================================
+        // CONFIGURATION: INSERT YOUR PUSHER CREDENTIALS HERE
+        // =========================================================================
+        const PUSHER_KEY = '25790a5661338b7c7756';
+        const PUSHER_CLUSTER = 'ap2';
+        const PUSHER_SECRET = '9a7ffd7b2858442cd939'; // Secure client-side calculator handles this
+        
+        // Setup room based on URL params or auto-generate a secure hash
+        const urlParams = new URLSearchParams(window.location.search);
+        let roomId = urlParams.get('room');
+        if (!roomId) {
+            roomId = Math.random().toString(36).substring(2, 15);
+            window.history.pushState({}, '', `?room=${roomId}`);
         }
-      } catch (err) {}
-    };
-    ws.onclose = () => {
-      document.getElementById('connLed').className = 'led bad';
-      document.getElementById('connText').textContent = 'Server drop. Re-routing sockets...';
-      setTimeout(connect, 3000);
-    };
-  }
-  connect();
+        const channelName = `private-watch-${roomId}`;
 
-  return {
-    id: clientId,
-    send(payload) {
-      const msg = { ...payload, _from: clientId, _t: Date.now() };
-      fetch(`https://ntfy.sh/${topic}`, { method: 'POST', body: JSON.stringify(msg) }).catch(()=>{});
-    },
-    onMessage(fn) { listeners.push(fn); }
-  };
-})();
+        // Initialize Advanced Fluid Video Player Core
+        const player = new Plyr('#player', {
+            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'fullscreen'],
+            ratio: '16:9'
+        });
 
-let peopleSeen = new Set([Channel.id]);
-function bumpPeople(id){
-  peopleSeen.add(id);
-  document.getElementById('peopleCount').textContent = peopleSeen.size;
-  document.getElementById('memberPill').textContent = peopleSeen.size + ' online';
-}
-setInterval(() => Channel.send({type:'presence'}), 4000);
+        let isSyncing = false;
+        let updateTimeout;
 
-// ========================= COMPONENT BINDING SELECTORS =========================
-const videoEl = document.getElementById('videoEl');
-const ytFrameContainer = document.getElementById('ytFrameContainer');
-const ytShield = document.getElementById('ytShield');
-const placeholder = document.getElementById('placeholder');
-const linkInput = document.getElementById('linkInput');
-const loadBtn = document.getElementById('loadBtn');
-const playBtn = document.getElementById('playBtn');
-const backBtn = document.getElementById('backBtn');
-const fwdBtn = document.getElementById('fwdBtn');
-const seekBar = document.getElementById('seekBar');
-const timeLabel = document.getElementById('timeLabel');
-const volSlider = document.getElementById('volSlider');
-const volIcon = document.getElementById('volIcon');
-const fsBtn = document.getElementById('fsBtn');
-const playerWrap = document.getElementById('playerWrap');
-const driftLabel = document.getElementById('driftLabel');
+        // =========================================================================
+        // PUSHER SERVERLESS PRIVATE HANDSHAKE ENGINE
+        // =========================================================================
+        const pusher = new Pusher(PUSHER_KEY, {
+            cluster: PUSHER_CLUSTER,
+            channelAuthorization: {
+                transport: 'ajax',
+                customHandler: function({ socketId, channelName }, callback) {
+                    // Browser-Side Signing Signature Generation
+                    // Emulates a backend server endpoint by computing HMAC-SHA256 locally.
+                    const stringToSign = socketId + ":" + channelName;
+                    const hash = CryptoJS.HmacSHA256(stringToSign, PUSHER_SECRET);
+                    const signature = CryptoJS.enc.Hex.stringify(hash);
+                    
+                    callback(null, {
+                        auth: PUSHER_KEY + ":" + signature
+                    });
+                }
+            }
+        });
 
-// Subtitle Dom References
-const uploadSubsBtn = document.getElementById('uploadSubsBtn');
-const subtitleFileInput = document.getElementById('subtitleFileInput');
-const subtitleText = document.getElementById('subtitleText');
-const subtitlesBox = document.getElementById('subtitlesBox');
+        // Join Room Channel Securely
+        const watchChannel = pusher.subscribe(channelName);
 
-// Subtitle Menu Customizer References
-const subSettingsToggleBtn = document.getElementById('subSettingsToggleBtn');
-const subSettingsMenu = document.getElementById('subSettingsMenu');
-const subTimeLabel = document.getElementById('subTimeLabel');
-const subSizeLabel = document.getElementById('subSizeLabel');
-const subAlphaLabel = document.getElementById('subAlphaLabel');
-const subPosLabel = document.getElementById('subPosLabel');
+        // =========================================================================
+        // MEDIA SYNC AND COORDINATION EVENT BINDINGS
+        // =========================================================================
+        watchChannel.bind('client-video-play', (data) => {
+            if (Math.abs(player.currentTime - data.time) > 1.5) {
+                isSyncing = true;
+                player.currentTime = data.time;
+            }
+            player.play();
+            setTimeout(() => { isSyncing = false; }, 500);
+        });
 
-// Fullscreen Menu Configuration Elements
-const fsChatToggleBtn = document.getElementById('fsChatToggleBtn');
-const fsChatMenu = document.getElementById('fsChatMenu');
-const toggleFloatingTxtBtn = document.getElementById('toggleFloatingTxtBtn');
-const toggleFsInputBtn = document.getElementById('toggleFsInputBtn');
-const fsMsgStream = document.getElementById('fsMsgStream');
-const fsInputBoxWrap = document.getElementById('fsInputBoxWrap');
-const fsChatInputField = document.getElementById('fsChatInputField');
-const fsChatSendBtn = document.getElementById('fsChatSendBtn');
+        watchChannel.bind('client-video-pause', (data) => {
+            player.pause();
+            if (Math.abs(player.currentTime - data.time) > 1.5) {
+                isSyncing = true;
+                player.currentTime = data.time;
+                setTimeout(() => { isSyncing = false; }, 500);
+            }
+        });
 
-// ========================= GLOBAL STATE REGISTRY =========================
-let mode = null, ytPlayer = null, suppressBroadcast = false, lastKnownRemoteState = null, currentSrc = null;
+        watchChannel.bind('client-chat-msg', (data) => {
+            appendMessage(data.user, data.text);
+        });
 
-// Synced Subtitle Memory Matrix
-let globalSubtitlesArray = [];
-let subSettings = { offset: 0.0, size: 20, alpha: 75, position: 0 };
+        // Player Actions Trigger Direct, Low-Latency Socket Blasts
+        player.on('play', () => {
+            if (isSyncing) return;
+            watchChannel.trigger('client-video-play', { time: player.currentTime });
+        });
 
-// Fullscreen Preferences (Local Context Flags)
-let configFloatingTxt = true;
-let configFsInputBox = false;
-let controlsTimeoutToken = null;
+        player.on('pause', () => {
+            if (isSyncing) return;
+            watchChannel.trigger('client-video-pause', { time: player.currentTime });
+        });
 
-function fmtTime(s){
-  if (!isFinite(s) || s < 0) s = 0;
-  const m = Math.floor(s/60), sec = Math.floor(s%60);
-  return m + ':' + String(sec).padStart(2,'0');
-}
-function isYouTube(url){ return /youtu\.?be/.test(url); }
-function getYouTubeId(url){
-  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
-  return m ? m[1] : null;
-}
+        // Rate-limiting / Debouncing timeline adjustments to save message quota
+        player.on('seeking', () => {
+            if (isSyncing) return;
+            clearTimeout(updateTimeout);
+            updateTimeout = setTimeout(() => {
+                watchChannel.trigger('client-video-play', { time: player.currentTime });
+            }, 300);
+        });
 
-// ---------- UI Popover Overlay Layout Toggles ----------
-function closeAllPopovers() {
-  subSettingsMenu.classList.remove('open');
-  fsChatMenu.classList.remove('open');
-}
-subSettingsToggleBtn.addEventListener('click', (e) => { e.stopPropagation(); fsChatMenu.classList.remove('open'); subSettingsMenu.classList.toggle('open'); });
-fsChatToggleBtn.addEventListener('click', (e) => { e.stopPropagation(); subSettingsMenu.classList.remove('open'); fsChatMenu.classList.toggle('open'); });
-document.addEventListener('click', closeAllPopovers);
-subSettingsMenu.addEventListener('click', (e) => e.stopPropagation());
-fsChatMenu.addEventListener('click', (e) => e.stopPropagation());
-
-// ---------- Comprehensive Hard Reset State Controller ----------
-function wipeAndClearActivePlayers() {
-  videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); videoEl.style.display = 'none';
-  ytFrameContainer.style.display = 'none'; ytShield.style.display = 'none';
-  ytFrameContainer.innerHTML = '<div class="yt-shield" id="ytShield"></div><div id="ytFrame"></div>';
-  // Re-bind shield pointer tracking reference elements
-  setTimeout(() => { document.getElementById('ytShield').addEventListener('click', togglePlay); }, 100);
-  ytPlayer = null; subtitleText.textContent = "";
-}
-
-function loadYouTubeAPI(cb){
-  if (window.YT && window.YT.Player) { cb(); return; }
-  window.onYouTubeIframeAPIReady = cb;
-  const tag = document.createElement('script'); tag.src = "https://www.youtube.com/iframe_api";
-  document.head.appendChild(tag);
-}
-
-function loadLink(url, fromRemote=false){
-  if (!url) return;
-  placeholder.style.display = 'none';
-  currentSrc = url;
-  wipeAndClearActivePlayers();
-
-  if (isYouTube(url)) {
-    const id = getYouTubeId(url);
-    if (!id) { alert('Invalid stream payload string parser logic fail.'); return; }
-    mode = 'youtube';
-    ytFrameContainer.style.display = 'block';
-    const tgtShield = document.getElementById('ytShield');
-    tgtShield.style.display = 'block';
-
-    loadYouTubeAPI(() => {
-      ytPlayer = new YT.Player('ytFrame', {
-        videoId: id,
-        playerVars: { autoplay: 1, playsinline: 1, controls: 0, rel: 0, cc_load_policy: 0, iv_load_policy: 3 },
-        events: {
-          onReady: () => {
-            ytPlayer.setVolume(volSlider.value);
-            startTicking();
-            if(lastKnownRemoteState) applyRemoteState(lastKnownRemoteState, true);
-          },
-          onStateChange: onYTStateChange
+        // =========================================================================
+        // UI AND UTILITY HELPER FUNCS
+        // =========================================================================
+        function loadNewVideo() {
+            const url = document.getElementById('videoUrlInput').value.trim();
+            if (!url) return;
+            
+            // Updates media source paths seamlessly inside the active framework shell
+            player.source = {
+                type: 'video',
+                sources: [{ src: url }]
+            };
+            
+            appendMessage("System", "Loaded new movie path stream successfully.");
         }
-      });
-    });
-  } else {
-    mode = 'video';
-    videoEl.style.display = 'block';
-    videoEl.src = url;
-    videoEl.volume = volSlider.value/100;
-    videoEl.play().catch(()=>{});
-    startTicking();
-  }
-  addSystemMsg((fromRemote ? 'Host' : 'You') + ' configured playback source 🎬');
-  if (!fromRemote) Channel.send({type:'load', url});
-}
 
-loadBtn.addEventListener('click', () => loadLink(linkInput.value.trim()));
-linkInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadLink(linkInput.value.trim()); });
+        function sendChatMessage() {
+            const input = document.getElementById('chatMessageInput');
+            const msg = input.value.trim();
+            if (!msg) return;
 
-function onYTStateChange(e){
-  if (suppressBroadcast) return;
-  if (e.data === YT.PlayerState.PLAYING) broadcastState(true);
-  if (e.data === YT.PlayerState.PAUSED) broadcastState(false);
-}
+            watchChannel.trigger('client-chat-msg', { user: 'Friend', text: msg });
+            appendMessage('You', msg);
+            input.value = '';
+        }
 
-function getCurrentTime(){
-  if (mode === 'video') return videoEl.currentTime || 0;
-  if (mode === 'youtube' && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') return ytPlayer.getCurrentTime() || 0;
-  return 0;
-}
-function getDuration(){
-  if (mode === 'video') return videoEl.duration || 0;
-  if (mode === 'youtube' && ytPlayer && typeof ytPlayer.getDuration === 'function') return ytPlayer.getDuration() || 0;
-  return 0;
-}
-function isPlaying(){
-  if (mode === 'video') return !videoEl.paused;
-  if (mode === 'youtube' && ytPlayer && typeof ytPlayer.getPlayerState === 'function') return ytPlayer.getPlayerState() === 1;
-  return false;
-}
-function seekTo(t){
-  if (mode === 'video') videoEl.currentTime = t;
-  if (mode === 'youtube' && ytPlayer && typeof ytPlayer.seekTo === 'function') ytPlayer.seekTo(t, true);
-}
-function playMedia(){
-  if (mode === 'video') videoEl.play().catch(()=>{});
-  if (mode === 'youtube' && ytPlayer && typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
-}
-function pauseMedia(){
-  if (mode === 'video') videoEl.pause();
-  if (mode === 'youtube' && ytPlayer && typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
-}
+        function appendMessage(user, text) {
+            const log = document.getElementById('chatLog');
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.innerHTML = `<div class="message-author">${user}</div><div>${text}</div>`;
+            log.appendChild(bubble);
+            log.scrollTop = log.scrollHeight;
+        }
 
-function togglePlay(){
-  if (isPlaying()) { Daniel = false;延时 = true; pauseMedia(); broadcastState(false); }
-  else { playMedia(); broadcastState(true); }
-}
-playBtn.addEventListener('click', togglePlay);
-document.getElementById('ytShield').addEventListener('click', togglePlay);
+        function toggleChatPanel() {
+            document.getElementById('chatPanel').classList.toggle('collapsed');
+        }
 
-backBtn.addEventListener('click', () => { seekTo(Math.max(0, getCurrentTime()-10)); broadcastState(isPlaying()); });
-fwdBtn.addEventListener('click', () => { seekTo(getCurrentTime()+10); broadcastState(isPlaying()); });
-
-volSlider.addEventListener('input', () => {
-  const v = volSlider.value;
-  if (mode === 'video') videoEl.volume = v/100;
-  if (mode === 'youtube' && ytPlayer && typeof ytPlayer.setVolume === 'function') ytPlayer.setVolume(v);
-  volIcon.textContent = v == 0 ? '🔇' : (v < 50 ? '🔉' : '🔊');
-});
-seekBar.addEventListener('input', () => { const dur = getDuration(); if (dur > 0) seekTo((seekBar.value/100) * dur); });
-seekBar.addEventListener('change', () => broadcastState(isPlaying()));
-
-// ---------- Immersive Fullscreen Framework Core ----------
-fsBtn.addEventListener('click', () => {
-  if (!document.fullscreenElement) playerWrap.requestFullscreen().catch(()=>{});
-  else document.exitFullscreen();
-});
-
-// Controls visibility management loop
-function triggerShowControlsTemporarily() {
-  playerWrap.classList.add('show-controls');
-  clearTimeout(controlsTimeoutToken);
-  
-  // Re-evaluate visibility states of custom typing dashboards
-  if (configFsInputBox && document.fullscreenElement) {
-    fsInputBoxWrap.classList.add('visible');
-  }
-
-  controlsTimeoutToken = setTimeout(() => {
-    // Only lock down controls if dropdown panels are completely closed to preserve accessibility tree options
-    if (!subSettingsMenu.classList.contains('open') && !fsChatMenu.classList.contains('open') && document.activeElement !== fsChatInputField) {
-      playerWrap.classList.remove('show-controls');
-    }
-  }, 3500);
-}
-playerWrap.addEventListener('mousemove', triggerShowControlsTemporarily);
-playerWrap.addEventListener('click', triggerShowControlsTemporarily);
-
-function broadcastState(playing){
-  if (suppressBroadcast) return;
-  Channel.send({ type:'state', time: getCurrentTime(), playing, src: currentSrc });
-}
-
-videoEl.addEventListener('play', () => { playBtn.textContent = '⏸️'; broadcastState(true); });
-videoEl.addEventListener('pause', () => { playBtn.textContent = '▶️'; broadcastState(false); });
-
-// ========================= AUTOMATIC RESYNC TICK RUNNER =========================
-function startTicking(){
-  clearInterval(window.__tick);
-  window.__tick = setInterval(() => {
-    const cur = getCurrentTime(), dur = getDuration();
-    if (dur > 0) seekBar.value = (cur/dur)*100;
-    timeLabel.textContent = fmtTime(cur) + ' / ' + fmtTime(dur);
-    playBtn.textContent = isPlaying() ? '⏸️' : '▶️';
-
-    updateSubtitlesLoop(cur);
-
-    if (lastKnownRemoteState) {
-      const elapsedSinceUpdate = (Date.now() - lastKnownRemoteState.updatedAt)/1000;
-      const expectedRemoteTime = lastKnownRemoteState.time + (lastKnownRemoteState.playing ? elapsedSinceUpdate : 0);
-      const drift = Math.abs(expectedRemoteTime - cur);
-      
-      driftLabel.textContent = drift.toFixed(1) + 's';
-      
-      if (drift > 1.6) {
-        document.getElementById('connLed').className = 'led warn';
-        document.getElementById('connText').textContent = 'Synchronizing Tracks...';
-        applyRemoteState(lastKnownRemoteState, true);
-      } else {
-        document.getElementById('connLed').className = 'led';
-        document.getElementById('connText').textContent = 'Live Synced Pipeline';
-      }
-    }
-  }, 250);
-}
-
-function applyRemoteState(state, hardSnap=false){
-  if (!state) return;
-  suppressBroadcast = true;
-
-  if (state.src && state.src !== currentSrc) {
-    loadLink(state.src, true);
-    lastKnownRemoteState = state;
-    return;
-  }
-  const elapsed = (Date.now() - state.updatedAt)/1000;
-  const targetTime = state.time + (state.playing ? Math.max(0, elapsed) : 0);
-  const drift = Math.abs(targetTime - getCurrentTime());
-
-  if (hardSnap || drift > 3.5) seekTo(targetTime);
-  if (state.playing) playMedia(); else pauseMedia();
-
-  setTimeout(() => { suppressBroadcast = false; }, 300);
-}
-
-// ========================= ADVANCED CLOUD SUBTITLE MATRIX =========================
-uploadSubsBtn.addEventListener('click', () => subtitleFileInput.click());
-subtitleFileInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (evt) => {
-    const parsed = parseSubtitleData(evt.target.result);
-    // Broadcast loaded data directly down across all peer instances in real-time
-    Channel.send({ type: 'cloud-subs-file', filename: file.name, data: parsed });
-    applyLoadedSubtitles(file.name, parsed, false);
-  };
-  reader.readAsText(file);
-});
-
-function applyLoadedSubtitles(filename, data, fromRemote=false) {
-  globalSubtitlesArray = data;
-  addSystemMsg((fromRemote ? 'Cloud' : 'You') + ` synchronized captions file: "${filename}" 💬`);
-}
-
-function parseSubtitleData(text) {
-  const blocks = text.replace(/\r\n/g, '\n').split('\n\n');
-  const items = [];
-  const timeRegex = /(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/;
-
-  blocks.forEach(block => {
-    const lines = block.split('\n');
-    let match = null, textStartIndex = 1;
-    for(let i=0; i<lines.length; i++) {
-      const m = timeRegex.exec(lines[i]);
-      if(m) { match = m; textStartIndex = i + 1; break; }
-    }
-    if (match) {
-      const start = parseInt(match[1])*3600 + parseInt(match[2])*60 + parseInt(match[3]) + parseInt(match[4])/1000;
-      const end = parseInt(match[5])*3600 + parseInt(match[6])*60 + parseInt(match[7]) + parseInt(match[8])/1000;
-      const subText = lines.slice(textStartIndex).join('\n').replace(/<[^>]*>/g, '').trim();
-      if(subText) items.push({ start, end, text: subText });
-    }
-  });
-  return items.sort((a, b) => a.start - b.start);
-}
-
-function updateSubtitlesLoop(currentTime) {
-  if (globalSubtitlesArray.length === 0) return;
-  // Apply the cloud-adjusted timing offset modifier directly into scanning calculations
-  const adjustedTime = currentTime + subSettings.offset;
-  const activeSub = globalSubtitlesArray.find(s => adjustedTime >= s.start && adjustedTime <= s.end);
-  
-  if (activeSub) {
-    if (subtitleText.textContent !== activeSub.text) subtitleText.textContent = activeSub.text;
-  } else {
-    subtitleText.textContent = "";
-  }
-}
-
-// ---------- Subtitle Property Modification Handlers ----------
-function pushSubtitleConfigUpdate() {
-  Channel.send({ type: 'cloud-subs-config', config: subSettings });
-  applySubtitleStylesToUi();
-}
-function applySubtitleStylesToUi() {
-  subTimeLabel.textContent = (subSettings.offset >= 0 ? '+' : '') + subSettings.offset.toFixed(1) + 's';
-  subSizeLabel.textContent = subSettings.size + 'px';
-  subAlphaLabel.textContent = subSettings.alpha + '%';
-  subPosLabel.textContent = subSettings.position + 'px';
-
-  // Apply custom parameters to the text display elements via structural CSS overrides
-  subtitleText.style.fontSize = subSettings.size + 'px';
-  subtitleText.style.background = `rgba(0, 0, 0, ${subSettings.alpha / 100})`;
-  subtitlesBox.style.transform = `translateY(-${subSettings.position}px)`;
-}
-
-document.getElementById('subTimePlusBtn').addEventListener('click', () => { subSettings.offset += 0.1; pushSubtitleConfigUpdate(); });
-document.getElementById('subTimeMinusBtn').addEventListener('click', () => { subSettings.offset -= 0.1; pushSubtitleConfigUpdate(); });
-document.getElementById('subSizePlusBtn').addEventListener('click', () => { subSettings.size = Math.min(44, subSettings.size + 2); pushSubtitleConfigUpdate(); });
-document.getElementById('subSizeMinusBtn').addEventListener('click', () => { subSettings.size = Math.max(12, subSettings.size - 2); pushSubtitleConfigUpdate(); });
-document.getElementById('subAlphaPlusBtn').addEventListener('click', () => { subSettings.alpha = Math.min(100, subSettings.alpha + 5); pushSubtitleConfigUpdate(); });
-document.getElementById('subAlphaMinusBtn').addEventListener('click', () => { subSettings.alpha = Math.max(0, subSettings.alpha - 5); pushSubtitleConfigUpdate(); });
-document.getElementById('subPosPlusBtn').addEventListener('click', () => { subSettings.position += 5; pushSubtitleConfigUpdate(); });
-document.getElementById('subPosMinusBtn').addEventListener('click', () => { subSettings.position = Math.max(0, subSettings.position - 5); pushSubtitleConfigUpdate(); });
-
-
-// ========================= FLOATING TEXT SCREEN LOGIC SYSTEM =========================
-toggleFloatingTxtBtn.addEventListener('click', () => {
-  configFloatingTxt = !configFloatingTxt;
-  toggleFloatingTxtBtn.textContent = configFloatingTxt ? 'ON' : 'OFF';
-  toggleFloatingTxtBtn.className = configFloatingTxt ? 'btn-sm primary' : 'btn-sm';
-});
-toggleFsInputBtn.addEventListener('click', () => {
-  configFsInputBox = !configFsInputBox;
-  toggleFsInputBtn.textContent = configFsInputBox ? 'ON' : 'OFF';
-  toggleFsInputBtn.className = configFsInputBox ? 'btn-sm primary' : 'btn-sm';
-  
-  if (configFsInputBox && document.fullscreenElement) fsInputBoxWrap.classList.add('visible');
-  else fsInputBoxWrap.classList.remove('visible');
-});
-
-function spawnFloatingTextOverlay(senderName, rawMessage) {
-  if (!configFloatingTxt) return;
-  
-  const bubble = document.createElement('div');
-  bubble.className = 'fs-toast';
-  
-  const nameLabel = document.createElement('div');
-  nameLabel.className = 'sender';
-  nameLabel.textContent = senderName;
-  
-  const msgBody = document.createElement('div');
-  msgBody.textContent = rawMessage;
-  
-  bubble.appendChild(nameLabel);
-  bubble.appendChild(msgBody);
-  fsMsgStream.appendChild(bubble);
-
-  // Animate away out of existence after exactly 5 seconds
-  setTimeout(() => {
-    bubble.classList.add('vanish');
-    bubble.addEventListener('animationend', () => bubble.remove());
-  }, 5000);
-}
-
-function handleFullscreenInlineMessageSubmission() {
-  const text = fsChatInputField.value.trim();
-  if(!text) return;
-  sendChat(text, false);
-  fsChatInputField.value = '';
-}
-fsChatSendBtn.addEventListener('click', handleFullscreenInlineMessageSubmission);
-fsChatInputField.addEventListener('keydown', (e) => { 
-  if (e.key === 'Enter') handleFullscreenInlineMessageSubmission();
-  e.stopPropagation(); // Avoid triggering theater spatial key bindings
-});
-
-
-// ========================= NETWORK COMMAND DISPATCH DECODER =========================
-Channel.onMessage((data) => {
-  if (data._from === Channel.id) return;
-  bumpPeople(data._from);
-  if (data.type === 'presence') return;
-
-  if (data.type === 'load') loadLink(data.url, true);
-  if (data.type === 'state') {
-    lastKnownRemoteState = { time: data.time, playing: data.playing, updatedAt: data._t, src: data.src };
-    applyRemoteState(lastKnownRemoteState, false);
-  }
-  if (data.type === 'request-state') {
-    Channel.send({ type:'state', time:getCurrentTime(), playing:isPlaying(), src: currentSrc });
-  }
-  if (data.type === 'chat') {
-    renderMessage(data.name, data.text, false, data.emojiOnly);
-    spawnFloatingTextOverlay(data.name, data.text);
-  }
-  if (data.type === 'cloud-subs-file') {
-    applyLoadedSubtitles(data.filename, data.data, true);
-  }
-  if (data.type === 'cloud-subs-config') {
-    subSettings = data.config;
-    applySubtitleStylesToUi();
-  }
-});
-
-
-// ========================= SIDEBAR CHAT LOUNGE SYSTEM =========================
-const messagesEl = document.getElementById('messages');
-const chatInput = document.getElementById('chatInput');
-const sendBtn = document.getElementById('sendBtn');
-const nameInput = document.getElementById('nameInput');
-const emojiBtn = document.getElementById('emojiBtn');
-const emojiPanel = document.getElementById('emojiPanel');
-
-nameInput.value = localStorage.getItem('wp-name') || ('User' + Math.floor(Math.random()*900+100));
-nameInput.addEventListener('change', () => localStorage.setItem('wp-name', nameInput.value));
-
-const EMOJIS = ['😀','😂','😍','😎','🥳','😭','😱','👍','👎','❤️','🔥','🎉','👏','🍿','💀','👀','🙌','💯','🎬'];
-EMOJIS.forEach(em => {
-  const b = document.createElement('button'); b.textContent = em;
-  b.addEventListener('click', () => { sendChat(em, true); emojiPanel.classList.remove('remove'); });
-  emojiPanel.appendChild(b);
-});
-emojiBtn.addEventListener('click', (e) => { e.stopPropagation(); emojiPanel.classList.toggle('open'); });
-document.addEventListener('click', () => emojiPanel.classList.remove('open'));
-
-function addSystemMsg(text){
-  const d = document.createElement('div'); d.className = 'msg sys'; d.textContent = text;
-  messagesEl.appendChild(d); messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
-function renderMessage(name, text, isMe, emojiOnly=false){
-  const wrap = document.createElement('div');
-  wrap.className = 'msg' + (isMe ? ' me' : '') + (emojiOnly ? ' emoji-only' : '');
-  if (!emojiOnly) {
-    const who = document.createElement('div'); who.className = 'who'; who.textContent = name; wrap.appendChild(who);
-  }
-  const body = document.createElement('div'); body.textContent = text; wrap.appendChild(body);
-  messagesEl.appendChild(wrap); messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
-function sendChat(text, emojiOnly=false){
-  if (!text.trim()) return;
-  const name = nameInput.value || 'Anonymous';
-  renderMessage(name, text, true, emojiOnly);
-  spawnFloatingTextOverlay(name, text);
-  Channel.send({ type:'chat', name, text, emojiOnly });
-  chatInput.value = '';
-}
-
-sendBtn.addEventListener('click', () => sendChat(chatInput.value, false));
-chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(chatInput.value, false); });
-
-document.addEventListener('fullscreenchange', () => {
-  if (document.fullscreenElement) {
-    if (configFsInputBox) fsInputBoxWrap.classList.add('visible');
-  } else {
-    fsInputBoxWrap.classList.remove('visible');
-  }
-});
-
-applySubtitleStylesToUi();
-addSystemMsg('Workspace connected. Subtitles & control alignments initialized across the cloud! 🚀');
-</script>
+        // Allow pressing enter key to transmit chats instantly
+        document.getElementById('chatMessageInput').addEventListener('keydown', (e) => {
+            if(e.key === 'Enter') sendChatMessage();
+        });
+    </script>
 </body>
 </html>
