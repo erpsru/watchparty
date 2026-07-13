@@ -51,8 +51,28 @@
 
         .app-container { display: flex; flex: 1; width: 100%; height: calc(100vh - 65px); overflow: hidden; }
 
-        .video-section { flex: 3; display: flex; flex-direction: column; justify-content: center; background: #000; position: relative; }
-        .player-wrapper { width: 100%; max-height: 100%; aspect-ratio: 16 / 9; margin: auto; position: relative; }
+        .video-section { flex: 3; min-width: 0; display: flex; flex-direction: column; justify-content: center; align-items: stretch; background: #000; position: relative; }
+
+        /* Fixed 16:9 box that never depends on the source video's real dimensions.
+           Width is driven by the available space; height is derived from width via
+           aspect-ratio, and capped so it never overflows the section's height either
+           (e.g. on short/wide windows) — whichever is the limiting dimension wins. */
+        .player-wrapper {
+            width: 100%; max-width: calc((100vh - 65px) * 16 / 9);
+            aspect-ratio: 16 / 9; margin: 0 auto; position: relative;
+        }
+
+        /* Plyr computes its own size from the video's native dimensions unless told
+           otherwise — this forces the actual player (and any big/odd-aspect source,
+           4K, portrait, whatever) to fill this fixed 16:9 box instead of shrinking
+           or letterboxing based on the file itself. */
+        .player-wrapper .plyr,
+        .player-wrapper .plyr__video-wrapper {
+            width: 100% !important; height: 100% !important; max-width: none !important;
+        }
+        .player-wrapper video {
+            width: 100% !important; height: 100% !important; object-fit: contain;
+        }
 
         .sidebar-section {
             flex: 1; min-width: 350px; max-width: 420px; background: var(--panel-bg); border-left: 1px solid var(--border-color);
@@ -206,7 +226,7 @@
                     </div>
                     <div class="row">
                         <input type="text" id="subtitleUrlInputFs" placeholder="Paste .vtt/.srt subtitle URL">
-                        <button class="ghost" onclick="ingestSubtitleFromUrl(true)">Add</button>
+                        <button class="ghost" onclick="ingestSubtitleFromUrl()">Add</button>
                     </div>
                     <div class="file-upload-btn" style="margin-top:8px;">
                         📂 Upload Subtitle (.vtt, .srt) — local to you only
@@ -225,47 +245,6 @@
                     <input type="text" id="usernameInput" value="" onchange="updateProfileHandle()" style="flex:1; padding:6px 10px;">
                 </div>
                 <div style="font-size:0.72rem; color:rgba(255,255,255,0.35); margin-top:6px;" id="roomIdLabel"></div>
-            </div>
-
-            <div class="sidebar-panel">
-                <div class="panel-title">Subtitle Timing &amp; Presentation</div>
-                <div class="control-grid">
-                    <div class="tool-btn-group">
-                        <button onclick="adjustSubtitleTiming(-0.1)">-</button>
-                        <span class="tool-label" id="lblSubDelay">Timing: 0.0s</span>
-                        <button onclick="adjustSubtitleTiming(0.1)">+</button>
-                    </div>
-                    <div class="tool-btn-group">
-                        <button onclick="adjustSubtitleStyling('size', -2)">-</button>
-                        <span class="tool-label" id="lblSubSize">Size: 16px</span>
-                        <button onclick="adjustSubtitleStyling('size', 2)">+</button>
-                    </div>
-                    <div class="tool-btn-group">
-                        <button onclick="adjustSubtitleStyling('pos', -5)">-</button>
-                        <span class="tool-label" id="lblSubPos">Lift: 0px</span>
-                        <button onclick="adjustSubtitleStyling('pos', 5)">+</button>
-                    </div>
-                    <div class="tool-btn-group">
-                        <button onclick="adjustSubtitleStyling('opacity', -0.1)">-</button>
-                        <span class="tool-label" id="lblSubOpacity">Opacity: 1.0</span>
-                        <button onclick="adjustSubtitleStyling('opacity', 0.1)">+</button>
-                    </div>
-                </div>
-
-                <div class="row">
-                    <select id="subtitleTrackSelect" onchange="selectSubtitleTrack(this.value, true)">
-                        <option value="-1">Subtitles: Off</option>
-                    </select>
-                </div>
-
-                <div class="row">
-                    <input type="text" id="subtitleUrlInput" placeholder="Paste .vtt/.srt subtitle URL">
-                    <button class="ghost" onclick="ingestSubtitleFromUrl(false)">Add</button>
-                </div>
-                <div class="file-upload-btn" style="margin-top:8px;">
-                    📂 Upload Subtitle File (.vtt, .srt) — local to you only
-                    <input type="file" id="externalSubFile" accept=".vtt,.srt" onchange="ingestExternalSubtitles(this)">
-                </div>
             </div>
 
             <div class="sidebar-panel" id="audioTrackPanel" style="display:none;">
@@ -339,7 +318,8 @@
         const player = new Plyr(videoElement, {
             controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'fullscreen'],
             settings: ['captions', 'quality', 'speed'],
-            captions: { active: true, update: true }
+            captions: { active: true, update: true },
+            ratio: '16:9' // keep the player box fixed regardless of the loaded video's actual dimensions
         });
 
         const pusher = new Pusher(PUSHER_KEY, {
@@ -404,7 +384,6 @@
                 processMediaParsing(data.url, () => {
                     beginSeekSync(data.time, data.playing);
                     subDelayOffset = data.subDelayOffset || 0;
-                    document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
                     syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
                 });
             }
@@ -514,7 +493,6 @@
                 selectSubtitleTrack(data.trackId, false);
             } else if (data.type === 'subdelay') {
                 subDelayOffset = data.value;
-                document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
                 syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
                 applySubtitleOffsetToCues();
             }
@@ -592,14 +570,12 @@
         }
 
         function resetSubtitleAndAudioUI() {
-            document.getElementById('subtitleTrackSelect').innerHTML = '<option value="-1">Subtitles: Off</option>';
             document.getElementById('subtitleTrackSelectFs').innerHTML = '<option value="-1">Subtitles: Off</option>';
             document.getElementById('audioTrackSelect').innerHTML = '';
             document.getElementById('audioTrackPanel').style.display = 'none';
             currentSubtitleTrackId = -1;
             currentAudioTrackId = -1;
             subDelayOffset = 0.0;
-            document.getElementById('lblSubDelay').innerText = "Timing: 0.0s";
             syncSubtitleLabel('lblSubDelayFs', 0);
         }
 
@@ -681,18 +657,16 @@
         // =========================================================================
 
         function refreshSubtitleMenu() {
-            const selectors = [document.getElementById('subtitleTrackSelect'), document.getElementById('subtitleTrackSelectFs')];
-            selectors.forEach(sel => {
-                sel.innerHTML = '<option value="-1">Subtitles: Off</option>';
-                for (let i = 0; i < videoElement.textTracks.length; i++) {
-                    const t = videoElement.textTracks[i];
-                    const opt = document.createElement('option');
-                    opt.value = i;
-                    opt.text = t.label || t.language || `Track ${i}`;
-                    sel.appendChild(opt);
-                }
-                sel.value = currentSubtitleTrackId;
-            });
+            const sel = document.getElementById('subtitleTrackSelectFs');
+            sel.innerHTML = '<option value="-1">Subtitles: Off</option>';
+            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                const t = videoElement.textTracks[i];
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.text = t.label || t.language || `Track ${i}`;
+                sel.appendChild(opt);
+            }
+            sel.value = currentSubtitleTrackId;
         }
 
         function populateEmbeddedSubtitles() {
@@ -719,7 +693,6 @@
                 player.toggleCaptions(true);
             }
 
-            document.getElementById('subtitleTrackSelect').value = idx;
             document.getElementById('subtitleTrackSelectFs').value = idx;
             if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
         }
@@ -794,8 +767,8 @@
             if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label, isSrt: !!isSrt });
         }
 
-        function ingestSubtitleFromUrl(fromFullscreen) {
-            const input = document.getElementById(fromFullscreen ? 'subtitleUrlInputFs' : 'subtitleUrlInput');
+        function ingestSubtitleFromUrl() {
+            const input = document.getElementById('subtitleUrlInputFs');
             const url = input.value.trim();
             if (!url) return;
             const label = url.split('/').pop().split('?')[0].replace(/\.(srt|vtt)$/i, '');
@@ -851,7 +824,6 @@
 
         function adjustSubtitleTiming(stepDelta) {
             subDelayOffset += stepDelta;
-            document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
             syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
             applySubtitleOffsetToCues();
             watchChannel.trigger('client-global-track', { type: 'subdelay', value: subDelayOffset });
@@ -863,17 +835,14 @@
             if (property === 'size') {
                 subSizePx = Math.max(10, Math.min(42, subSizePx + modificationDelta));
                 element.style.setProperty('--sub-size-val', `${subSizePx}px`);
-                document.getElementById('lblSubSize').innerText = `Size: ${subSizePx}px`;
                 document.getElementById('lblSubSizeFs').innerText = `Size: ${subSizePx}px`;
             } else if (property === 'pos') {
                 subPositionLift += modificationDelta;
                 element.style.setProperty('--sub-pos-val', `${subPositionLift}px`);
-                document.getElementById('lblSubPos').innerText = `Lift: ${subPositionLift}px`;
                 document.getElementById('lblSubPosFs').innerText = `Lift: ${subPositionLift}px`;
             } else if (property === 'opacity') {
                 subOpacityFloat = Math.max(0.1, Math.min(1.0, subOpacityFloat + modificationDelta));
                 element.style.setProperty('--sub-opacity-val', subOpacityFloat.toFixed(1));
-                document.getElementById('lblSubOpacity').innerText = `Opacity: ${subOpacityFloat.toFixed(1)}`;
                 document.getElementById('lblSubOpacityFs').innerText = `Opacity: ${subOpacityFloat.toFixed(1)}`;
             }
             // subtitle look/position is a personal display preference, not synced across the room on purpose
@@ -1012,8 +981,7 @@
 
         document.getElementById('sidebarChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(false); });
         document.getElementById('fullscreenChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(true); });
-        document.getElementById('subtitleUrlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(false); });
-        document.getElementById('subtitleUrlInputFs').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(true); });
+        document.getElementById('subtitleUrlInputFs').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(); });
     </script>
 </body>
 </html>
