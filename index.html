@@ -117,6 +117,15 @@
         /* Only auto-hide the *box chrome* when idle; text already sent stays visible via toast layer above */
         .plyr--hide-controls .plyr-fullscreen-input-layer.idle-hide { transform: translateY(85px); opacity: 0; pointer-events: none; }
 
+        .plyr-fullscreen-subtitle-layer {
+            position: absolute; bottom: 80px; right: 25px; width: 320px; background: var(--glass-bg);
+            backdrop-filter: blur(16px); border: 1px solid var(--glass-border); padding: 14px; border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5); z-index: 11; display: none;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease, bottom 0.25s ease;
+        }
+        .plyr--fullscreen-active.plyr--hide-controls .plyr-fullscreen-subtitle-layer { bottom: 25px; }
+        .plyr-fullscreen-subtitle-layer .panel-title { margin-bottom: 8px; }
+
         .plyr__captions { font-size: var(--sub-size-val, 16px) !important; opacity: var(--sub-opacity-val, 1) !important; transform: translateY(var(--sub-pos-val, 0px)) !important; transition: all 0.1s ease; }
 
         .custom-player-toggle {
@@ -163,6 +172,45 @@
                     <div style="display:flex; gap:8px;">
                         <input type="text" id="fullscreenChatInput" placeholder="Send quick message..." style="flex:1; padding:6px 10px; font-size:0.85rem;">
                         <button onclick="transmitMessage(true)" style="padding:6px 12px; font-size:0.85rem;">Send</button>
+                    </div>
+                </div>
+
+                <div id="glassSubtitleLayer" class="plyr-fullscreen-subtitle-layer idle-hide">
+                    <div class="panel-title">Subtitle Timing &amp; Presentation</div>
+                    <div class="control-grid">
+                        <div class="tool-btn-group">
+                            <button onclick="adjustSubtitleTiming(-0.1)">-</button>
+                            <span class="tool-label" id="lblSubDelayFs">Timing: 0.0s</span>
+                            <button onclick="adjustSubtitleTiming(0.1)">+</button>
+                        </div>
+                        <div class="tool-btn-group">
+                            <button onclick="adjustSubtitleStyling('size', -2)">-</button>
+                            <span class="tool-label" id="lblSubSizeFs">Size: 16px</span>
+                            <button onclick="adjustSubtitleStyling('size', 2)">+</button>
+                        </div>
+                        <div class="tool-btn-group">
+                            <button onclick="adjustSubtitleStyling('pos', -5)">-</button>
+                            <span class="tool-label" id="lblSubPosFs">Lift: 0px</span>
+                            <button onclick="adjustSubtitleStyling('pos', 5)">+</button>
+                        </div>
+                        <div class="tool-btn-group">
+                            <button onclick="adjustSubtitleStyling('opacity', -0.1)">-</button>
+                            <span class="tool-label" id="lblSubOpacityFs">Opacity: 1.0</span>
+                            <button onclick="adjustSubtitleStyling('opacity', 0.1)">+</button>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <select id="subtitleTrackSelectFs" onchange="selectSubtitleTrack(this.value, true)">
+                            <option value="-1">Subtitles: Off</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <input type="text" id="subtitleUrlInputFs" placeholder="Paste .vtt/.srt subtitle URL">
+                        <button class="ghost" onclick="ingestSubtitleFromUrl(true)">Add</button>
+                    </div>
+                    <div class="file-upload-btn" style="margin-top:8px;">
+                        📂 Upload Subtitle (.vtt, .srt) — local to you only
+                        <input type="file" id="externalSubFileFs" accept=".vtt,.srt" onchange="ingestExternalSubtitles(this)">
                     </div>
                 </div>
             </div>
@@ -212,7 +260,7 @@
 
                 <div class="row">
                     <input type="text" id="subtitleUrlInput" placeholder="Paste .vtt/.srt subtitle URL">
-                    <button class="ghost" onclick="ingestSubtitleFromUrl()">Add</button>
+                    <button class="ghost" onclick="ingestSubtitleFromUrl(false)">Add</button>
                 </div>
                 <div class="file-upload-btn" style="margin-top:8px;">
                     📂 Upload Subtitle File (.vtt, .srt) — local to you only
@@ -267,6 +315,8 @@
         const channelName = `private-watch-${roomId}`;
 
         let isSyncing = false;
+        let seekInProgress = false;
+        let lastSyncEventTs = 0;
         let updateTimeout;
         let hlsInstance = null;
         let localHeartbeatInterval = null;
@@ -278,6 +328,7 @@
 
         let floatingToastActive = true;
         let glassInputActive = false;
+        let glassSubtitleActive = false;
 
         let activeVideoUrl = '';   // the video actually loaded right now (source of truth for late joiners)
         let currentSubtitleTrackId = -1;
@@ -311,6 +362,7 @@
             if (plyrContainer) {
                 plyrContainer.appendChild(document.getElementById('toastLayer'));
                 plyrContainer.appendChild(document.getElementById('glassInputLayer'));
+                plyrContainer.appendChild(document.getElementById('glassSubtitleLayer'));
                 injectCustomPlayerButtons();
             }
         });
@@ -350,34 +402,103 @@
             // Only catch up if we don't already have this exact stream loaded
             if (data.url && data.url !== activeVideoUrl) {
                 processMediaParsing(data.url, () => {
-                    isSyncing = true;
-                    player.currentTime = data.time;
+                    beginSeekSync(data.time, data.playing);
                     subDelayOffset = data.subDelayOffset || 0;
                     document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
-                    if (data.playing) player.play();
-                    setTimeout(() => { isSyncing = false; }, 800);
+                    syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
                 });
             }
         });
 
         // =========================================================================
-        // SYNC EVENTS
+        // SYNC EVENTS — rewritten to fix the "video pauses/restarts for other
+        // people after a big seek" bug.
+        //
+        // Root cause: the old code set `isSyncing = true`, applied the seek, then
+        // used a flat setTimeout(400ms) to flip isSyncing back to false. But after
+        // a large jump (e.g. 4:00 -> 8:00) the browser has to buffer the new
+        // position first, which routinely takes longer than 400ms — especially on
+        // HLS. When the video paused internally to buffer, isSyncing had already
+        // flipped back to false, so the local `pause` handler thought it was a
+        // real user pause and re-broadcast it to the whole room, freezing
+        // everyone at that stale spot. Resuming from there just replayed the same
+        // stale position ("resume from where it started").
+        //
+        // Fix: instead of a fixed timer, we track a real seek-lifecycle using the
+        // media element's own buffering signals (`waiting` / `playing` / `canplay`)
+        // so isSyncing only clears once the browser has actually caught up and is
+        // really playing again. A separate `seekInProgress` flag additionally
+        // suppresses the pause handler specifically during that buffering window
+        // (belt-and-suspenders, in case a browser fires `pause` while stalling).
+        //
+        // We also stamp every outgoing sync event with a timestamp and ignore
+        // incoming events older than the last one we already applied, so a
+        // stale/out-of-order event from a laggy connection can't undo a newer one.
         // =========================================================================
-        watchChannel.bind('client-video-play', (data) => {
-            if (Math.abs(player.currentTime - data.time) > 1.2) {
-                isSyncing = true;
-                player.currentTime = data.time;
+
+        function beginSeekSync(targetTime, shouldPlay) {
+            isSyncing = true;
+            seekInProgress = true;
+
+            const clearSyncFlags = () => {
+                isSyncing = false;
+                seekInProgress = false;
+                videoElement.removeEventListener('playing', onCaughtUp);
+                videoElement.removeEventListener('canplay', onCaughtUpIfNotPlaying);
+            };
+
+            const onCaughtUp = () => clearSyncFlags();
+            const onCaughtUpIfNotPlaying = () => {
+                // if we're not supposed to end up playing, "canplay" is our signal that
+                // the seek itself has settled (buffered enough to show the frame)
+                if (!shouldPlay) clearSyncFlags();
+            };
+
+            videoElement.addEventListener('playing', onCaughtUp);
+            videoElement.addEventListener('canplay', onCaughtUpIfNotPlaying);
+
+            player.currentTime = targetTime;
+            if (shouldPlay) {
+                player.play();
+            } else {
+                player.pause();
             }
-            player.play();
-            setTimeout(() => { isSyncing = false; }, 400);
+
+            // safety net: never leave the flags stuck forever if neither event fires
+            // (e.g. a broken/unreachable stream) — 8s is generous enough to cover
+            // real buffering without masking a real re-broadcast for too long.
+            setTimeout(clearSyncFlags, 8000);
+        }
+
+        function stampedPayload(extra) {
+            const ts = Date.now();
+            lastSyncEventTs = ts;
+            return Object.assign({ ts }, extra);
+        }
+
+        function isStaleEvent(data) {
+            return typeof data.ts === 'number' && data.ts < lastSyncEventTs;
+        }
+
+        watchChannel.bind('client-video-play', (data) => {
+            if (isStaleEvent(data)) return;
+            if (typeof data.ts === 'number') lastSyncEventTs = data.ts;
+            const needsSeek = Math.abs(player.currentTime - data.time) > 1.2;
+            if (needsSeek) {
+                beginSeekSync(data.time, true);
+            } else {
+                if (!isSyncing) player.play();
+            }
         });
 
         watchChannel.bind('client-video-pause', (data) => {
-            player.pause();
-            if (Math.abs(player.currentTime - data.time) > 1.2) {
-                isSyncing = true;
-                player.currentTime = data.time;
-                setTimeout(() => { isSyncing = false; }, 400);
+            if (isStaleEvent(data)) return;
+            if (typeof data.ts === 'number') lastSyncEventTs = data.ts;
+            const needsSeek = Math.abs(player.currentTime - data.time) > 1.2;
+            if (needsSeek) {
+                beginSeekSync(data.time, false);
+            } else {
+                player.pause();
             }
         });
 
@@ -394,13 +515,14 @@
             } else if (data.type === 'subdelay') {
                 subDelayOffset = data.value;
                 document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
+                syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
                 applySubtitleOffsetToCues();
             }
         });
 
         // A host adding a subtitle by URL is broadcast so everyone gets the same track automatically
         watchChannel.bind('client-subtitle-url', (data) => {
-            addSubtitleTrackFromUrl(data.url, data.label, false);
+            addSubtitleTrackFromUrl(data.url, data.label, false, data.isSrt);
         });
 
         watchChannel.bind('client-heartbeat', (data) => {
@@ -417,13 +539,15 @@
 
         player.on('play', () => {
             if (isSyncing) return;
-            watchChannel.trigger('client-video-play', { time: player.currentTime });
+            watchChannel.trigger('client-video-play', stampedPayload({ time: player.currentTime }));
             startHeartbeatBroadcast();
         });
 
         player.on('pause', () => {
-            if (isSyncing) return;
-            watchChannel.trigger('client-video-pause', { time: player.currentTime });
+            // Never rebroadcast a pause caused by our own in-flight seek/buffering —
+            // this is the fix for the "freezes everyone" bug described above.
+            if (isSyncing || seekInProgress) return;
+            watchChannel.trigger('client-video-pause', stampedPayload({ time: player.currentTime }));
             clearInterval(localHeartbeatInterval);
         });
 
@@ -431,7 +555,13 @@
             if (isSyncing) return;
             clearTimeout(updateTimeout);
             updateTimeout = setTimeout(() => {
-                watchChannel.trigger('client-video-play', { time: player.currentTime });
+                // Preserve whatever the play/pause state was *before* this seek —
+                // dragging the scrub bar while paused should stay paused for
+                // everyone, not force playback to start (old behavior always
+                // triggered client-video-play here, which force-played on scrub).
+                const wasPlaying = player.playing;
+                const eventName = wasPlaying ? 'client-video-play' : 'client-video-pause';
+                watchChannel.trigger(eventName, stampedPayload({ time: player.currentTime }));
             }, 250);
         });
 
@@ -446,10 +576,9 @@
 
         function requestRoomSync() {
             watchChannel.trigger('client-request-status', { from: currentUsername });
-            isSyncing = true;
-            watchChannel.trigger('client-video-play', { time: player.currentTime });
             document.getElementById('latencyBadge').style.display = 'none';
-            setTimeout(() => { isSyncing = false; }, 400);
+            beginSeekSync(player.currentTime, player.playing);
+            watchChannel.trigger(player.playing ? 'client-video-play' : 'client-video-pause', stampedPayload({ time: player.currentTime }));
         }
 
         // =========================================================================
@@ -459,17 +588,19 @@
             const targetUrl = document.getElementById('videoUrlInput').value.trim();
             if (!targetUrl) return;
             processMediaParsing(targetUrl);
-            watchChannel.trigger('client-video-play', { time: 0 });
+            watchChannel.trigger('client-video-play', stampedPayload({ time: 0 }));
         }
 
         function resetSubtitleAndAudioUI() {
             document.getElementById('subtitleTrackSelect').innerHTML = '<option value="-1">Subtitles: Off</option>';
+            document.getElementById('subtitleTrackSelectFs').innerHTML = '<option value="-1">Subtitles: Off</option>';
             document.getElementById('audioTrackSelect').innerHTML = '';
             document.getElementById('audioTrackPanel').style.display = 'none';
             currentSubtitleTrackId = -1;
             currentAudioTrackId = -1;
             subDelayOffset = 0.0;
             document.getElementById('lblSubDelay').innerText = "Timing: 0.0s";
+            syncSubtitleLabel('lblSubDelayFs', 0);
         }
 
         function processMediaParsing(url, executionCallback = null) {
@@ -537,18 +668,31 @@
 
         // =========================================================================
         // SUBTITLES: embedded detection, URL add, file upload, timing/style, sync
+        //
+        // Two bugs fixed here:
+        // 1) Selection now goes through Plyr's own captions API (player.currentTrack
+        //    / player.toggleCaptions) instead of only setting the native
+        //    textTrack.mode directly — Plyr manages its own captions render state
+        //    (.plyr__captions) and was ignoring/overriding the manual mode flips,
+        //    which is why subtitles loaded but never actually appeared on screen.
+        // 2) .srt files are not natively renderable by <track> (browsers only
+        //    understand WebVTT) — they now get converted to VTT in-browser before
+        //    being attached, for both uploads and pasted URLs.
         // =========================================================================
+
         function refreshSubtitleMenu() {
-            const sel = document.getElementById('subtitleTrackSelect');
-            sel.innerHTML = '<option value="-1">Subtitles: Off</option>';
-            for (let i = 0; i < videoElement.textTracks.length; i++) {
-                const t = videoElement.textTracks[i];
-                const opt = document.createElement('option');
-                opt.value = i;
-                opt.text = t.label || t.language || `Track ${i}`;
-                sel.appendChild(opt);
-            }
-            sel.value = currentSubtitleTrackId;
+            const selectors = [document.getElementById('subtitleTrackSelect'), document.getElementById('subtitleTrackSelectFs')];
+            selectors.forEach(sel => {
+                sel.innerHTML = '<option value="-1">Subtitles: Off</option>';
+                for (let i = 0; i < videoElement.textTracks.length; i++) {
+                    const t = videoElement.textTracks[i];
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.text = t.label || t.language || `Track ${i}`;
+                    sel.appendChild(opt);
+                }
+                sel.value = currentSubtitleTrackId;
+            });
         }
 
         function populateEmbeddedSubtitles() {
@@ -559,42 +703,128 @@
         function selectSubtitleTrack(idx, broadcast) {
             idx = parseInt(idx, 10);
             currentSubtitleTrackId = idx;
+
+            // Drive selection through Plyr's captions system instead of only
+            // flipping native textTrack.mode — Plyr owns the actual on-screen
+            // rendering (.plyr__captions) and will otherwise ignore/override a
+            // manual mode change, which is why captions previously loaded but
+            // never displayed.
             for (let i = 0; i < videoElement.textTracks.length; i++) {
-                videoElement.textTracks[i].mode = (i === idx) ? 'showing' : 'hidden';
+                videoElement.textTracks[i].mode = (i === idx) ? 'showing' : 'disabled';
             }
+            if (idx === -1) {
+                player.toggleCaptions(false);
+            } else {
+                player.currentTrack = idx;
+                player.toggleCaptions(true);
+            }
+
             document.getElementById('subtitleTrackSelect').value = idx;
+            document.getElementById('subtitleTrackSelectFs').value = idx;
             if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
         }
 
-        function addSubtitleTrackFromUrl(url, label, broadcast) {
-            const trackNode = document.createElement('track');
-            trackNode.kind = 'captions';
-            trackNode.label = label || 'Subtitle';
-            trackNode.srclang = 'ext';
-            trackNode.src = url;
-            videoElement.appendChild(trackNode);
-            setTimeout(() => {
-                refreshSubtitleMenu();
-                appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
-            }, 400);
-            if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label });
+        // ---- SRT -> VTT conversion ----
+        function srtTimeToVtt(t) {
+            return t.replace(',', '.');
         }
 
-        function ingestSubtitleFromUrl() {
-            const input = document.getElementById('subtitleUrlInput');
+        function convertSrtToVtt(srtText) {
+            // Normalize line endings, strip numeric cue-index lines, convert
+            // "00:00:01,000 --> 00:00:02,000" timestamps to VTT's dot-separated form,
+            // and prepend the required "WEBVTT" header.
+            const normalized = srtText.replace(/\r+/g, '').trim();
+            const blocks = normalized.split(/\n\n+/);
+            const vttBlocks = blocks.map(block => {
+                const lines = block.split('\n').filter(line => line.trim() !== '');
+                // drop a leading pure-numeric cue index line, if present
+                if (lines.length && /^\d+$/.test(lines[0].trim())) {
+                    lines.shift();
+                }
+                return lines.map((line, i) => {
+                    if (i === 0 || line.includes('-->')) {
+                        return line.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, (m, hms, ms) => `${hms}.${ms}`);
+                    }
+                    return line;
+                }).join('\n');
+            }).filter(b => b.trim() !== '');
+            return 'WEBVTT\n\n' + vttBlocks.join('\n\n');
+        }
+
+        function isLikelySrt(url, filename) {
+            const target = (filename || url || '').toLowerCase();
+            return target.endsWith('.srt');
+        }
+
+        function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
+            const trackNode = document.createElement('track');
+            trackNode.kind = 'subtitles';
+            trackNode.label = label || 'Subtitle';
+            trackNode.srclang = 'ext';
+
+            if (isSrt) {
+                // Fetch + convert remote SRT files to a VTT blob URL, since <track>
+                // can only render WebVTT natively.
+                fetch(url)
+                    .then(res => {
+                        if (!res.ok) throw new Error('Failed to fetch subtitle file');
+                        return res.text();
+                    })
+                    .then(srtText => {
+                        const vttBlob = new Blob([convertSrtToVtt(srtText)], { type: 'text/vtt' });
+                        trackNode.src = URL.createObjectURL(vttBlob);
+                        videoElement.appendChild(trackNode);
+                        setTimeout(() => {
+                            refreshSubtitleMenu();
+                            appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
+                        }, 400);
+                    })
+                    .catch(err => {
+                        appendMessage("System", `Couldn't load subtitle "${label}" — the source may not allow cross-origin access.`);
+                    });
+            } else {
+                trackNode.src = url;
+                videoElement.appendChild(trackNode);
+                setTimeout(() => {
+                    refreshSubtitleMenu();
+                    appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
+                }, 400);
+            }
+
+            if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label, isSrt: !!isSrt });
+        }
+
+        function ingestSubtitleFromUrl(fromFullscreen) {
+            const input = document.getElementById(fromFullscreen ? 'subtitleUrlInputFs' : 'subtitleUrlInput');
             const url = input.value.trim();
             if (!url) return;
-            addSubtitleTrackFromUrl(url, url.split('/').pop().split('.')[0], true);
+            const label = url.split('/').pop().split('?')[0].replace(/\.(srt|vtt)$/i, '');
+            addSubtitleTrackFromUrl(url, label, true, isLikelySrt(url));
             input.value = '';
         }
 
         function ingestExternalSubtitles(uploaderNode) {
             const nativeFile = uploaderNode.files[0];
             if (!nativeFile) return;
-            const localBlobUrl = URL.createObjectURL(nativeFile);
-            const label = nativeFile.name.replace('.vtt', '').replace('.srt', '') + ' (local only)';
-            addSubtitleTrackFromUrl(localBlobUrl, label, false);
-            appendMessage("System", "Uploaded subtitle is local to your browser only — use the URL option to share subtitles with the room.");
+            const isSrt = isLikelySrt('', nativeFile.name);
+            const label = nativeFile.name.replace(/\.(vtt|srt)$/i, '') + ' (local only)';
+
+            if (isSrt) {
+                // Read the local file text, convert to VTT client-side, then attach
+                // as a blob URL — never leaves the browser, still local-only.
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const vttBlob = new Blob([convertSrtToVtt(reader.result)], { type: 'text/vtt' });
+                    const localBlobUrl = URL.createObjectURL(vttBlob);
+                    addSubtitleTrackFromUrl(localBlobUrl, label, false, false);
+                    appendMessage("System", "Uploaded subtitle is local to your browser only — use the URL option to share subtitles with the room.");
+                };
+                reader.readAsText(nativeFile);
+            } else {
+                const localBlobUrl = URL.createObjectURL(nativeFile);
+                addSubtitleTrackFromUrl(localBlobUrl, label, false, false);
+                appendMessage("System", "Uploaded subtitle is local to your browser only — use the URL option to share subtitles with the room.");
+            }
         }
 
         function applySubtitleOffsetToCues() {
@@ -614,9 +844,15 @@
             }
         }
 
+        function syncSubtitleLabel(baseId, value) {
+            const el = document.getElementById(baseId);
+            if (el) el.innerText = `Timing: ${value.toFixed(1)}s`;
+        }
+
         function adjustSubtitleTiming(stepDelta) {
             subDelayOffset += stepDelta;
             document.getElementById('lblSubDelay').innerText = `Timing: ${subDelayOffset.toFixed(1)}s`;
+            syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
             applySubtitleOffsetToCues();
             watchChannel.trigger('client-global-track', { type: 'subdelay', value: subDelayOffset });
         }
@@ -628,14 +864,17 @@
                 subSizePx = Math.max(10, Math.min(42, subSizePx + modificationDelta));
                 element.style.setProperty('--sub-size-val', `${subSizePx}px`);
                 document.getElementById('lblSubSize').innerText = `Size: ${subSizePx}px`;
+                document.getElementById('lblSubSizeFs').innerText = `Size: ${subSizePx}px`;
             } else if (property === 'pos') {
                 subPositionLift += modificationDelta;
                 element.style.setProperty('--sub-pos-val', `${subPositionLift}px`);
                 document.getElementById('lblSubPos').innerText = `Lift: ${subPositionLift}px`;
+                document.getElementById('lblSubPosFs').innerText = `Lift: ${subPositionLift}px`;
             } else if (property === 'opacity') {
                 subOpacityFloat = Math.max(0.1, Math.min(1.0, subOpacityFloat + modificationDelta));
                 element.style.setProperty('--sub-opacity-val', subOpacityFloat.toFixed(1));
                 document.getElementById('lblSubOpacity').innerText = `Opacity: ${subOpacityFloat.toFixed(1)}`;
+                document.getElementById('lblSubOpacityFs').innerText = `Opacity: ${subOpacityFloat.toFixed(1)}`;
             }
             // subtitle look/position is a personal display preference, not synced across the room on purpose
         }
@@ -749,15 +988,32 @@
                 const layer = document.getElementById('glassInputLayer');
                 layer.style.display = glassInputActive ? 'block' : 'none';
                 inputBtn.classList.toggle('active', glassInputActive);
+                // opening one overlay closes the other so they don't stack on top of each other
+                if (glassInputActive && glassSubtitleActive) subtitleBtn.click();
+            });
+
+            const subtitleBtn = document.createElement('button');
+            subtitleBtn.type = 'button';
+            subtitleBtn.className = 'custom-player-toggle';
+            subtitleBtn.innerHTML = '💬 Subtitles';
+            subtitleBtn.title = 'Toggle subtitle timing & style controls';
+            subtitleBtn.addEventListener('click', () => {
+                glassSubtitleActive = !glassSubtitleActive;
+                const layer = document.getElementById('glassSubtitleLayer');
+                layer.style.display = glassSubtitleActive ? 'block' : 'none';
+                subtitleBtn.classList.toggle('active', glassSubtitleActive);
+                if (glassSubtitleActive && glassInputActive) inputBtn.click();
             });
 
             controlsGrid.appendChild(toastBtn);
             controlsGrid.appendChild(inputBtn);
+            controlsGrid.appendChild(subtitleBtn);
         }
 
         document.getElementById('sidebarChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(false); });
         document.getElementById('fullscreenChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(true); });
-        document.getElementById('subtitleUrlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(); });
+        document.getElementById('subtitleUrlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(false); });
+        document.getElementById('subtitleUrlInputFs').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(true); });
     </script>
 </body>
 </html>
