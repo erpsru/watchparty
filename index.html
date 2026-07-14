@@ -1,14 +1,16 @@
 <!DOCTYPE html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-    <meta charset=\"UTF-8\">
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HBS Pro</title>
-    <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css\" />
-    <script src=\"https://js.pusher.com/8.0/pusher.min.js\"></script>
-    <script src=\"https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js\"></script>
-    <script src=\"https://cdn.jsdelivr.net/npm/hls.js@latest\"></script>
-    <script src=\"https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js\"></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+    <script src="https://js.pusher.com/8.0/pusher.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
+
     <style>
         :root {
             --bg-color: #0b0b0e;
@@ -20,20 +22,25 @@
             --glass-bg: rgba(12, 12, 20, 0.82);
             --glass-border: rgba(255, 255, 255, 0.14);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif; }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
         body { background-color: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
         .top-navbar {
             padding: 12px 20px; background: rgba(15, 15, 22, 0.95); border-bottom: 1px solid var(--border-color);
             display: flex; align-items: center; justify-content: space-between; gap: 15px; z-index: 5; flex-wrap: wrap;
         }
-        .nav-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: relative; }
+        .nav-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .brand-title { font-size: 1.05rem; font-weight: 800; letter-spacing: 0.3px; color: #fff; margin-right: 6px; white-space: nowrap; }
         .media-input-wrapper { flex: 1; max-width: 600px; display: flex; gap: 8px; min-width: 260px; }
-        input[type=\"text\"], select {
+
+        input[type="text"], select {
             background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); padding: 8px 14px;
             border-radius: 6px; color: #fff; outline: none; font-size: 0.9rem;
         }
-        input[type=\"text\"]:focus { border-color: var(--accent-color); }
+        input[type="text"]:focus { border-color: var(--accent-color); }
+
         button {
             background: var(--accent-color); color: white; border: none; padding: 8px 16px; border-radius: 6px;
             cursor: pointer; font-weight: 600; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px;
@@ -42,37 +49,31 @@
         button:hover { opacity: 0.9; }
         button.ghost { background: rgba(255,255,255,0.08); }
         button.danger { background: var(--sync-color); }
+
         .app-container { display: flex; flex: 1; width: 100%; height: calc(100vh - 65px); overflow: hidden; }
+
         .video-section { flex: 3; min-width: 0; display: flex; flex-direction: column; justify-content: center; align-items: stretch; background: #000; position: relative; }
+
+        /* Fixed 16:9 box that never depends on the source video's real dimensions.
+           Width is driven by the available space; height is derived from width via
+           aspect-ratio, and capped so it never overflows the section's height either
+           (e.g. on short/wide windows) — whichever is the limiting dimension wins. */
         .player-wrapper {
             width: 100%; max-width: calc((100vh - 65px) * 16 / 9);
             aspect-ratio: 16 / 9; margin: 0 auto; position: relative;
         }
-        .player-wrapper video { object-fit: contain; }
 
-        /* -- Custom subtitle overlay (rendered by us, not by Plyr) --
-           Plyr caches <track>s at init and doesn't render dynamically-added ones
-           reliably, and <track src=\"...\"> also requires CORS headers from the
-           subtitle host. So the rest of the subtitle code still adds <track>
-           elements exactly as before (for menu detection), but the on-screen
-           text is drawn from a parallel parsed-cue array into this overlay. */
-        #customCaptions {
-            position: absolute; left: 0; right: 0; bottom: 90px;
-            text-align: center; pointer-events: none; z-index: 5;
-            padding: 0 6%;
-            font-size: var(--sub-size-val, 22px);
-            opacity: var(--sub-opacity-val, 1);
-            transform: translateY(calc(var(--sub-pos-val, 0px) * -1));
-            transition: transform 0.1s ease, opacity 0.1s ease;
+        /* Plyr's own `ratio: '16:9'` config (set in JS below) handles the actual
+           sizing internally via its own padding-box math — that math is also what
+           positions the captions overlay (.plyr__captions), so we deliberately do
+           NOT force width/height with !important on Plyr's internal elements here
+           anymore. Doing that previously broke Plyr's caption positioning (track
+           loaded fine, but the text rendered off-screen/zero-height). We only
+           constrain the *outer* wrapper's width so Plyr computes a consistent
+           16:9 box from it, regardless of the source video's real dimensions. */
+        .player-wrapper video {
+            object-fit: contain;
         }
-        #customCaptions .cap-line {
-            display: inline-block; background: rgba(0,0,0,0.65);
-            color: #fff; padding: 4px 10px; border-radius: 4px;
-            line-height: 1.35; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-            white-space: pre-wrap; margin: 2px 0;
-        }
-        .plyr--hide-controls #customCaptions { bottom: 60px; }
-        .plyr--fullscreen-active #customCaptions { font-size: calc(var(--sub-size-val, 22px) * 1.4); }
 
         #unmutePrompt {
             display: none; position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
@@ -82,6 +83,7 @@
             animation: unmutePulse 2s ease-in-out infinite;
         }
         @keyframes unmutePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
         .subtitle-loading-badge {
             display: none; position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
             align-items: center; gap: 8px; background: rgba(10, 10, 15, 0.8); backdrop-filter: blur(12px);
@@ -93,12 +95,14 @@
             border-top-color: #fff; animation: spin 0.7s linear infinite; flex-shrink: 0;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
         .sidebar-section {
             flex: 1; min-width: 350px; max-width: 420px; background: var(--panel-bg); border-left: 1px solid var(--border-color);
             display: flex; flex-direction: column; backdrop-filter: blur(15px); overflow-y: auto;
         }
         .sidebar-panel { padding: 15px; border-bottom: 1px solid var(--border-color); }
         .panel-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.4); margin-bottom: 10px; font-weight: 700; }
+
         .control-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
         .tool-btn-group {
             display: flex; background: rgba(255,255,255,0.04); border-radius: 6px; border: 1px solid var(--border-color);
@@ -107,24 +111,31 @@
         .tool-btn-group button { background: transparent; padding: 6px 12px; border-radius: 0; }
         .tool-btn-group button:hover { background: rgba(255,255,255,0.08); }
         .tool-label { font-size: 0.8rem; padding: 0 4px; color: rgba(255,255,255,0.8); }
+
         .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
         .row select { flex: 1; }
+
         .chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; min-height: 160px; }
         .message-bubble { background: rgba(255, 255, 255, 0.04); padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.02); word-break: break-word; }
         .message-header { display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 4px; }
         .message-author { color: var(--accent-color); font-weight: bold; }
         .message-time { color: rgba(255,255,255,0.3); }
+
         .latency-badge { background: var(--sync-color); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; display: none; margin-left: 8px; }
+
         .file-upload-btn {
             position: relative; overflow: hidden; background: rgba(255,255,255,0.05); border: 1px dashed var(--border-color);
             text-align: center; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
         }
-        .file-upload-btn input[type=\"file\"] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+        .file-upload-btn input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+
         .plyr-fullscreen-toast-layer {
             position: absolute; bottom: 90px; right: 25px; width: 320px; display: flex; flex-direction: column; gap: 8px;
             pointer-events: none; z-index: 10; transition: bottom 0.25s ease;
         }
+        /* Toast layer lifts with the control bar when it's visible, drops back down when controls hide */
         .plyr--fullscreen-active.plyr--hide-controls .plyr-fullscreen-toast-layer { bottom: 25px; }
+
         .floating-toast {
             background: rgba(10, 10, 15, 0.8); backdrop-filter: blur(12px); border: 1px solid var(--glass-border);
             padding: 10px 14px; border-radius: 10px; color: #fff; font-size: 0.9rem; word-break: break-word;
@@ -137,6 +148,7 @@
             88% { transform: translateY(0); opacity: 1; }
             100% { transform: translateY(-16px); opacity: 0; }
         }
+
         .plyr-fullscreen-input-layer {
             position: absolute; bottom: 80px; right: 25px; width: 320px; background: var(--glass-bg);
             backdrop-filter: blur(16px); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px;
@@ -144,7 +156,9 @@
             transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease, bottom 0.25s ease;
         }
         .plyr--fullscreen-active.plyr--hide-controls .plyr-fullscreen-input-layer { bottom: 25px; }
+        /* Only auto-hide the *box chrome* when idle; text already sent stays visible via toast layer above */
         .plyr--hide-controls .plyr-fullscreen-input-layer.idle-hide { transform: translateY(85px); opacity: 0; pointer-events: none; }
+
         .plyr-fullscreen-subtitle-layer {
             position: absolute; bottom: 80px; right: 25px; width: 320px; background: var(--glass-bg);
             backdrop-filter: blur(16px); border: 1px solid var(--glass-border); padding: 14px; border-radius: 12px;
@@ -152,10 +166,15 @@
             transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease, bottom 0.25s ease;
         }
         .plyr--fullscreen-active.plyr--hide-controls .plyr-fullscreen-subtitle-layer { bottom: 25px; }
-        .plyr-fullscreen-subtitle-layer .panel-title { margin-bottom: 8px; color: rgba(255,255,255,0.75); text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+        .plyr-fullscreen-subtitle-layer .panel-title {
+            margin-bottom: 8px; color: rgba(255,255,255,0.75); text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        }
         .plyr-fullscreen-subtitle-layer .tool-label,
         .plyr-fullscreen-input-layer input,
         .floating-toast { text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+
+        .plyr__captions { font-size: var(--sub-size-val, 16px) !important; opacity: var(--sub-opacity-val, 1) !important; transform: translateY(var(--sub-pos-val, 0px)) !important; transition: all 0.1s ease; }
+
         .custom-player-toggle {
             background: rgba(255,255,255,0.08) !important; border: 1px solid rgba(255,255,255,0.15) !important;
             padding: 6px 10px !important; border-radius: 6px !important; font-size: 0.72rem !important;
@@ -163,27 +182,19 @@
         }
         .custom-player-toggle.active { background: var(--accent-color) !important; border-color: var(--accent-color) !important; }
 
-        /* Room-members popup */
-        #roomMembersPopup {
-            position: absolute; top: 100%; right: 0; margin-top: 8px; min-width: 240px;
-            background: var(--glass-bg); backdrop-filter: blur(16px); border: 1px solid var(--glass-border);
-            border-radius: 10px; padding: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-            z-index: 20; display: none;
-        }
-        #roomMembersPopup .rm-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.5); margin-bottom: 6px; font-weight: 700; }
-        #roomMembersPopup ul { list-style: none; padding: 0; margin: 0; }
-        #roomMembersPopup li { padding: 6px 8px; border-radius: 6px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
-        #roomMembersPopup li:hover { background: rgba(255,255,255,0.05); }
-        #roomMembersPopup li .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.6); }
-        #roomMembersPopup li.is-you { color: var(--accent-color); font-weight: 600; }
-
         @media (max-width: 900px) {
             body { overflow-y: auto; height: auto; min-height: 100vh; }
             .app-container { flex-direction: column; height: auto; overflow: visible; }
             .video-section { flex: none; width: 100%; position: sticky; top: 0; z-index: 10; }
+            /* Only the sidebar's own internal scroll is disabled here — the whole
+               page scrolls together instead of fighting with a nested scroll
+               region, which was causing scrolling to feel stuck/broken on phones. */
             .sidebar-section { flex: none; max-width: 100%; min-width: 100%; height: auto; overflow-y: visible; }
             .top-navbar { flex-direction: column; align-items: stretch; }
         }
+
+        /* Themed scrollbar (desktop sidebar + mobile page scroll) so it's visibly
+           there and matches the glass look instead of a default system bar. */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 8px; }
@@ -192,121 +203,133 @@
     </style>
 </head>
 <body>
-    <div class=\"top-navbar\">
-        <div class=\"nav-group\">
-            <span class=\"brand-title\">🎬 HBS Pro</span>
-            <button class=\"ghost\" onclick=\"createNewRoom()\">🆕 Create New Room</button>
-            <button onclick=\"shareActiveRoom()\">🔗 Share Invite Link</button>
+
+    <div class="top-navbar">
+        <div class="nav-group">
+            <span class="brand-title">🎬 HBS Pro</span>
+            <button class="ghost" onclick="createNewRoom()">🆕 Create New Room</button>
+            <button onclick="shareActiveRoom()">🔗 Share Invite Link</button>
         </div>
-        <div class=\"media-input-wrapper\">
-            <input type=\"text\" id=\"videoUrlInput\" placeholder=\"Paste video link (.mp4, YouTube, or .m3u8 HLS)\">
-            <button onclick=\"loadNewVideo()\">Load</button>
+
+        <div class="media-input-wrapper">
+            <input type="text" id="videoUrlInput" placeholder="Paste video link (.mp4, YouTube, or .m3u8 HLS)">
+            <button onclick="loadNewVideo()">Load</button>
         </div>
-        <div class=\"nav-group\">
-            <button class=\"ghost\" id=\"roomMembersBtn\" onclick=\"toggleRoomMembersPopup()\">👥 In Room: <span id=\"roomMembersCount\">1</span></button>
-            <button class=\"danger\" onclick=\"requestRoomSync()\">🔄 Sync to Room<span id=\"latencyBadge\" class=\"latency-badge\"></span></button>
-            <div id=\"roomMembersPopup\">
-                <div class=\"rm-title\">People in this room</div>
-                <ul id=\"roomMembersList\"><li>Just you so far</li></ul>
-            </div>
+
+        <div class="nav-group">
+            <button class="danger" onclick="requestRoomSync()">🔄 Sync to Room<span id="latencyBadge" class="latency-badge"></span></button>
         </div>
     </div>
-    <div class=\"app-container\">
-        <div class=\"video-section\">
-            <div class=\"player-wrapper\" id=\"videoWrapper\">
-                <video id=\"player\" playsinline controls crossorigin></video>
-                <div id=\"customCaptions\"></div>
-                <div id=\"toastLayer\" class=\"plyr-fullscreen-toast-layer\"></div>
-                <button id=\"unmutePrompt\" type=\"button\" onclick=\"player.muted = false; hideUnmutePrompt();\">🔇 Tap to unmute</button>
-                <div id=\"subtitleSyncBadge\" class=\"subtitle-loading-badge\">
-                    <span class=\"spinner\"></span> <span id=\"subtitleSyncBadgeText\">Syncing subtitle for everyone...</span>
+
+    <div class="app-container">
+
+        <div class="video-section">
+            <div class="player-wrapper" id="videoWrapper">
+                <video id="player" playsinline controls crossorigin></video>
+                <div id="toastLayer" class="plyr-fullscreen-toast-layer"></div>
+
+                <button id="unmutePrompt" type="button" onclick="player.muted = false; hideUnmutePrompt();">
+                    🔇 Tap to unmute
+                </button>
+
+                <div id="subtitleSyncBadge" class="subtitle-loading-badge">
+                    <span class="spinner"></span> <span id="subtitleSyncBadgeText">Syncing subtitle for everyone...</span>
                 </div>
-                <div id=\"glassInputLayer\" class=\"plyr-fullscreen-input-layer idle-hide\" style=\"display: none;\">
-                    <div style=\"display:flex; gap:8px;\">
-                        <input type=\"text\" id=\"fullscreenChatInput\" placeholder=\"Send quick message...\" style=\"flex:1; padding:6px 10px; font-size:0.85rem;\">
-                        <button onclick=\"transmitMessage(true)\" style=\"padding:6px 12px; font-size:0.85rem;\">Send</button>
+
+                <div id="glassInputLayer" class="plyr-fullscreen-input-layer idle-hide" style="display: none;">
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="fullscreenChatInput" placeholder="Send quick message..." style="flex:1; padding:6px 10px; font-size:0.85rem;">
+                        <button onclick="transmitMessage(true)" style="padding:6px 12px; font-size:0.85rem;">Send</button>
                     </div>
                 </div>
-                <div id=\"glassSubtitleLayer\" class=\"plyr-fullscreen-subtitle-layer idle-hide\">
-                    <div class=\"panel-title\">Subtitle Timing &amp; Presentation</div>
-                    <div class=\"control-grid\">
-                        <div class=\"tool-btn-group\">
-                            <button onclick=\"adjustSubtitleTiming(-0.1)\">-</button>
-                            <span class=\"tool-label\" id=\"lblSubDelayFs\">Timing: 0.0s</span>
-                            <button onclick=\"adjustSubtitleTiming(0.1)\">+</button>
+
+                <div id="glassSubtitleLayer" class="plyr-fullscreen-subtitle-layer idle-hide">
+                    <div class="panel-title">Subtitle Timing &amp; Presentation</div>
+                    <div class="control-grid">
+                        <div class="tool-btn-group">
+                            <button onclick="adjustSubtitleTiming(-0.1)">-</button>
+                            <span class="tool-label" id="lblSubDelayFs">Timing: 0.0s</span>
+                            <button onclick="adjustSubtitleTiming(0.1)">+</button>
                         </div>
-                        <div class=\"tool-btn-group\">
-                            <button onclick=\"adjustSubtitleStyling('size', -2)\">-</button>
-                            <span class=\"tool-label\" id=\"lblSubSizeFs\">Size: 22px</span>
-                            <button onclick=\"adjustSubtitleStyling('size', 2)\">+</button>
+                        <div class="tool-btn-group">
+                            <button onclick="adjustSubtitleStyling('size', -2)">-</button>
+                            <span class="tool-label" id="lblSubSizeFs">Size: 16px</span>
+                            <button onclick="adjustSubtitleStyling('size', 2)">+</button>
                         </div>
-                        <div class=\"tool-btn-group\">
-                            <button onclick=\"adjustSubtitleStyling('pos', -5)\">-</button>
-                            <span class=\"tool-label\" id=\"lblSubPosFs\">Lift: 0px</span>
-                            <button onclick=\"adjustSubtitleStyling('pos', 5)\">+</button>
+                        <div class="tool-btn-group">
+                            <button onclick="adjustSubtitleStyling('pos', -5)">-</button>
+                            <span class="tool-label" id="lblSubPosFs">Lift: 0px</span>
+                            <button onclick="adjustSubtitleStyling('pos', 5)">+</button>
                         </div>
-                        <div class=\"tool-btn-group\">
-                            <button onclick=\"adjustSubtitleStyling('opacity', -0.1)\">-</button>
-                            <span class=\"tool-label\" id=\"lblSubOpacityFs\">Opacity: 1.0</span>
-                            <button onclick=\"adjustSubtitleStyling('opacity', 0.1)\">+</button>
+                        <div class="tool-btn-group">
+                            <button onclick="adjustSubtitleStyling('opacity', -0.1)">-</button>
+                            <span class="tool-label" id="lblSubOpacityFs">Opacity: 1.0</span>
+                            <button onclick="adjustSubtitleStyling('opacity', 0.1)">+</button>
                         </div>
                     </div>
-                    <div class=\"row\">
-                        <select id=\"subtitleTrackSelectFs\" onchange=\"selectSubtitleTrack(this.value, true)\">
-                            <option value=\"-1\">Subtitles: Off</option>
+                    <div class="row">
+                        <select id="subtitleTrackSelectFs" onchange="selectSubtitleTrack(this.value, true)">
+                            <option value="-1">Subtitles: Off</option>
                         </select>
                     </div>
-                    <div class=\"row\">
-                        <input type=\"text\" id=\"subtitleUrlInputFs\" placeholder=\"Paste .vtt/.srt subtitle URL\">
-                        <button class=\"ghost\" onclick=\"ingestSubtitleFromUrl()\">Add</button>
+                    <div class="row">
+                        <input type="text" id="subtitleUrlInputFs" placeholder="Paste .vtt/.srt subtitle URL">
+                        <button class="ghost" onclick="ingestSubtitleFromUrl()">Add</button>
                     </div>
-                    <div class=\"file-upload-btn\" style=\"margin-top:8px;\">
-                        📂 Upload Subtitle (.vtt, .srt) — shared with the room
-                        <input type=\"file\" id=\"externalSubFileFs\" accept=\".vtt,.srt\" onchange=\"ingestExternalSubtitles(this)\">
+                    <div class="file-upload-btn" style="margin-top:8px;">
+                        📂 Upload Subtitle (.vtt, .srt) — local to you only
+                        <input type="file" id="externalSubFileFs" accept=".vtt,.srt" onchange="ingestExternalSubtitles(this)">
                     </div>
                 </div>
             </div>
         </div>
-        <div class=\"sidebar-section\">
-            <div class=\"sidebar-panel\">
-                <div class=\"panel-title\">User Profile</div>
-                <div style=\"display: flex; gap:8px; align-items:center;\">
-                    <span style=\"font-size:0.85rem; color:rgba(255,255,255,0.5);\">Name:</span>
-                    <input type=\"text\" id=\"usernameInput\" value=\"\" onchange=\"updateProfileHandle()\" style=\"flex:1; padding:6px 10px;\">
+
+        <div class="sidebar-section">
+
+            <div class="sidebar-panel">
+                <div class="panel-title">User Profile</div>
+                <div style="display: flex; gap:8px; align-items:center;">
+                    <span style="font-size:0.85rem; color:rgba(255,255,255,0.5);">Name:</span>
+                    <input type="text" id="usernameInput" value="" onchange="updateProfileHandle()" style="flex:1; padding:6px 10px;">
                 </div>
-                <div style=\"font-size:0.72rem; color:rgba(255,255,255,0.35); margin-top:6px;\" id=\"roomIdLabel\"></div>
+                <div style="font-size:0.72rem; color:rgba(255,255,255,0.35); margin-top:6px;" id="roomIdLabel"></div>
             </div>
-            <div class=\"sidebar-panel\" id=\"audioTrackPanel\" style=\"display:none;\">
-                <div class=\"panel-title\">Audio Language (Dual Audio)</div>
-                <div class=\"row\"><select id=\"audioTrackSelect\" onchange=\"selectAudioTrack(this.value, true)\"></select></div>
-            </div>
-            <div class=\"chat-messages\" id=\"chatLog\"></div>
-            <div class=\"sidebar-panel\" style=\"border-bottom:none; border-top:1px solid var(--border-color); background: rgba(0,0,0,0.15);\">
-                <div style=\"display:flex; gap:8px;\">
-                    <input type=\"text\" id=\"sidebarChatInput\" placeholder=\"Type a room message...\">
-                    <button onclick=\"transmitMessage(false)\">Send</button>
+
+            <div class="sidebar-panel" id="audioTrackPanel" style="display:none;">
+                <div class="panel-title">Audio Language (Dual Audio)</div>
+                <div class="row">
+                    <select id="audioTrackSelect" onchange="selectAudioTrack(this.value, true)"></select>
                 </div>
             </div>
+
+            <div class="chat-messages" id="chatLog"></div>
+
+            <div class="sidebar-panel" style="border-bottom:none; border-top:1px solid var(--border-color); background: rgba(0,0,0,0.15);">
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="sidebarChatInput" placeholder="Type a room message...">
+                    <button onclick="transmitMessage(false)">Send</button>
+                </div>
+            </div>
+
         </div>
     </div>
+
     <script>
         // =========================================================================
-        // CONFIG (unchanged)
+        // CONFIG
         // =========================================================================
         const PUSHER_KEY = '25790a5661338b7c7756';
         const PUSHER_CLUSTER = 'ap2';
         const PUSHER_SECRET = '9a7ffd7b2858442cd939';
+        // NOTE: signing client-side like this exposes the secret to anyone who views
+        // page source, which lets them forge events / join any room. Left as-is per
+        // request (simplest option for a friends-only setup) — swap for a real
+        // server-side auth endpoint later if you ever open this beyond trusted friends.
 
         let currentUsername = localStorage.getItem('party_user') || 'Guest_' + Math.floor(1000 + Math.random() * 9000);
         document.getElementById('usernameInput').value = currentUsername;
 
-        // Stable per-tab id so presence channel treats each browser tab as a distinct user
-        let myUserId = sessionStorage.getItem('party_uid');
-        if (!myUserId) {
-            myUserId = 'u_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
-            sessionStorage.setItem('party_uid', myUserId);
-        }
-
+        // ---- Room handling: read from URL, or create one automatically ----
         const urlParams = new URLSearchParams(window.location.search);
         let roomId = urlParams.get('room');
         const isFreshlyCreatedRoom = !roomId;
@@ -316,9 +339,7 @@
         }
         document.getElementById('roomIdLabel').innerText = 'Room: ' + roomId;
 
-        // Switched to a *presence* channel so we get member counts + names.
-        // (Presence channels are the only ones Pusher gives real presence data on.)
-        const channelName = `presence-watch-${roomId}`;
+        const channelName = `private-watch-${roomId}`;
 
         let isSyncing = false;
         let seekInProgress = false;
@@ -326,100 +347,47 @@
         let updateTimeout;
         let hlsInstance = null;
         let localHeartbeatInterval = null;
+
         let subDelayOffset = 0.0;
-        let subSizePx = 22;
+        let subSizePx = 16;
         let subOpacityFloat = 1.0;
         let subPositionLift = 0;
+
         let floatingToastActive = true;
         let glassInputActive = false;
         let glassSubtitleActive = false;
-        let activeVideoUrl = '';
+
+        let activeVideoUrl = '';   // the video actually loaded right now (source of truth for late joiners)
         let currentSubtitleTrackId = -1;
         let currentAudioTrackId = -1;
 
         const videoElement = document.getElementById('player');
-        const captionsOverlay = document.getElementById('customCaptions');
 
         const player = new Plyr(videoElement, {
-            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'fullscreen'],
-            settings: ['quality', 'speed'],
-            ratio: '16:9'
+            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'fullscreen'],
+            settings: ['captions', 'quality', 'speed'],
+            captions: { active: true, update: true },
+            ratio: '16:9' // keep the player box fixed regardless of the loaded video's actual dimensions
         });
 
-        // ---- Pusher auth (presence channel needs channel_data alongside signature) ----
         const pusher = new Pusher(PUSHER_KEY, {
             cluster: PUSHER_CLUSTER,
             channelAuthorization: {
                 transport: 'ajax',
                 customHandler: function({ socketId, channelName }, callback) {
-                    const channelData = JSON.stringify({
-                        user_id: myUserId,
-                        user_info: { name: currentUsername }
-                    });
-                    // Presence channel signature is over \"socketId:channelName:channelData\"
-                    // (private channels only sign \"socketId:channelName\" — the extra segment
-                    //  is what lets Pusher associate presence metadata with the auth).
-                    const stringToSign = socketId + \":\" + channelName + \":\" + channelData;
+                    const stringToSign = socketId + ":" + channelName;
                     const hash = CryptoJS.HmacSHA256(stringToSign, PUSHER_SECRET);
                     const signature = CryptoJS.enc.Hex.stringify(hash);
-                    callback(null, { auth: PUSHER_KEY + \":\" + signature, channel_data: channelData });
+                    callback(null, { auth: PUSHER_KEY + ":" + signature });
                 }
             }
         });
+
         const watchChannel = pusher.subscribe(channelName);
-
-        // =========================================================================
-        // ROOM MEMBERS UI (uses presence channel's built-in `members` object)
-        // =========================================================================
-        function refreshMembersUI() {
-            const members = watchChannel.members;
-            if (!members) return;
-            document.getElementById('roomMembersCount').textContent = members.count;
-            const list = document.getElementById('roomMembersList');
-            list.innerHTML = '';
-            const seen = [];
-            members.each((m) => {
-                const name = (m.info && m.info.name) ? m.info.name : (m.id || 'Anon');
-                const li = document.createElement('li');
-                if (m.id === myUserId) li.classList.add('is-you');
-                const dot = document.createElement('span'); dot.className = 'dot';
-                li.appendChild(dot);
-                li.appendChild(document.createTextNode(name + (m.id === myUserId ? '  (you)' : '')));
-                list.appendChild(li);
-                seen.push(name);
-            });
-            if (!seen.length) list.innerHTML = '<li>Just you so far</li>';
-        }
-
-        function toggleRoomMembersPopup() {
-            const p = document.getElementById('roomMembersPopup');
-            p.style.display = (p.style.display === 'block') ? 'none' : 'block';
-            if (p.style.display === 'block') refreshMembersUI();
-        }
-        // click outside to close
-        document.addEventListener('click', (e) => {
-            const popup = document.getElementById('roomMembersPopup');
-            const btn = document.getElementById('roomMembersBtn');
-            if (popup.style.display === 'block' && !popup.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
-                popup.style.display = 'none';
-            }
-        });
-
-        watchChannel.bind('pusher:member_added', (member) => {
-            const name = (member.info && member.info.name) ? member.info.name : 'Someone';
-            appendMessage(\"System\", `${name} joined the room.`);
-            refreshMembersUI();
-        });
-        watchChannel.bind('pusher:member_removed', (member) => {
-            const name = (member.info && member.info.name) ? member.info.name : 'Someone';
-            appendMessage(\"System\", `${name} left the room.`);
-            refreshMembersUI();
-        });
 
         player.on('ready', () => {
             const plyrContainer = document.querySelector('.plyr');
             if (plyrContainer) {
-                plyrContainer.appendChild(captionsOverlay);
                 plyrContainer.appendChild(document.getElementById('toastLayer'));
                 plyrContainer.appendChild(document.getElementById('glassInputLayer'));
                 plyrContainer.appendChild(document.getElementById('glassSubtitleLayer'));
@@ -428,40 +396,77 @@
         });
 
         // =========================================================================
-        // LATE-JOINER CATCH-UP (unchanged from your version)
+        // LATE-JOINER CATCH-UP (fixed: no longer depends on currentTime > 0.1,
+        // which meant a friend joining right as playback started, or right after
+        // a pause-at-start, got nothing back — this is why "friend loads page,
+        // sees nothing" used to happen)
         // =========================================================================
         watchChannel.bind('pusher:subscription_succeeded', () => {
-            appendMessage(\"System\", \"Connected to room: \" + roomId);
-            refreshMembersUI();
-            setTimeout(() => { watchChannel.trigger('client-request-status', { from: currentUsername }); }, 600);
-            if (isFreshlyCreatedRoom) setTimeout(shareActiveRoom, 500);
+            appendMessage("System", "Connected to room: " + roomId);
+            setTimeout(() => {
+                watchChannel.trigger('client-request-status', { from: currentUsername });
+            }, 600);
+
+            if (isFreshlyCreatedRoom) {
+                setTimeout(shareActiveRoom, 500);
+            }
         });
 
         watchChannel.bind('client-request-status', () => {
+            // Anyone who currently has a video loaded answers — not gated on playback time
             if (activeVideoUrl) {
                 watchChannel.trigger('client-respond-status', {
-                    url: activeVideoUrl, time: player.currentTime, playing: player.playing,
-                    audioTrack: currentAudioTrackId, subtitleTrack: currentSubtitleTrackId, subDelayOffset
+                    url: activeVideoUrl,
+                    time: player.currentTime,
+                    playing: player.playing,
+                    audioTrack: currentAudioTrackId,
+                    subtitleTrack: currentSubtitleTrackId,
+                    subDelayOffset
                 });
             }
         });
 
+        // =========================================================================
+        // AUTOPLAY-WITH-SOUND FALLBACK
+        //
+        // Browsers block programmatic play() *with audio* unless the visitor has
+        // already interacted with the page. A brand-new joiner landing on the
+        // invite link and immediately getting caught up to "4:00, playing" has
+        // had zero interaction yet — so an unmuted play() call gets silently
+        // rejected and nothing happens. We try unmuted first (works once someone
+        // has interacted at all, e.g. clicked Load earlier), and if the browser
+        // rejects it, fall back to a muted autoplay (always allowed) plus a small
+        // tap-to-unmute prompt so the video is at least actually playing/in-sync
+        // immediately, with sound one tap away.
+        // =========================================================================
         function attemptPlayWithFallback() {
             const playPromise = player.play();
             if (playPromise && typeof playPromise.catch === 'function') {
                 playPromise.catch(() => {
                     player.muted = true;
                     showUnmutePrompt();
-                    player.play().catch(() => {});
+                    player.play().catch(() => { /* even muted autoplay blocked — nothing more we can do */ });
                 });
             }
         }
-        function showUnmutePrompt() { const el = document.getElementById('unmutePrompt'); if (el) el.style.display = 'flex'; }
-        function hideUnmutePrompt() { const el = document.getElementById('unmutePrompt'); if (el) el.style.display = 'none'; }
-        player.on('volumechange', () => { if (!player.muted) hideUnmutePrompt(); });
+
+        function showUnmutePrompt() {
+            const prompt = document.getElementById('unmutePrompt');
+            if (prompt) prompt.style.display = 'flex';
+        }
+
+        function hideUnmutePrompt() {
+            const prompt = document.getElementById('unmutePrompt');
+            if (prompt) prompt.style.display = 'none';
+        }
+
+        player.on('volumechange', () => {
+            if (!player.muted) hideUnmutePrompt();
+        });
 
         watchChannel.bind('client-respond-status', (data) => {
             if (data.url && data.url !== activeVideoUrl) {
+                // Late-joiner catch-up: we don't have this video loaded at all yet.
                 processMediaParsing(data.url, () => {
                     beginSeekSync(data.time, data.playing);
                     subDelayOffset = data.subDelayOffset || 0;
@@ -469,42 +474,103 @@
                 });
                 awaitingManualSync = false;
             } else if (awaitingManualSync && data.url === activeVideoUrl) {
+                // Manual "Sync to Room" pull: adopt this responder's time/play state.
                 awaitingManualSync = false;
                 beginSeekSync(data.time, data.playing);
-                appendMessage(\"System\", \"Synced to the room.\");
+                appendMessage("System", "Synced to the room.");
             }
         });
 
-        // ===== Sync events (unchanged) =====
+        // =========================================================================
+        // SYNC EVENTS — rewritten to fix the "video pauses/restarts for other
+        // people after a big seek" bug.
+        //
+        // Root cause: the old code set `isSyncing = true`, applied the seek, then
+        // used a flat setTimeout(400ms) to flip isSyncing back to false. But after
+        // a large jump (e.g. 4:00 -> 8:00) the browser has to buffer the new
+        // position first, which routinely takes longer than 400ms — especially on
+        // HLS. When the video paused internally to buffer, isSyncing had already
+        // flipped back to false, so the local `pause` handler thought it was a
+        // real user pause and re-broadcast it to the whole room, freezing
+        // everyone at that stale spot. Resuming from there just replayed the same
+        // stale position ("resume from where it started").
+        //
+        // Fix: instead of a fixed timer, we track a real seek-lifecycle using the
+        // media element's own buffering signals (`waiting` / `playing` / `canplay`)
+        // so isSyncing only clears once the browser has actually caught up and is
+        // really playing again. A separate `seekInProgress` flag additionally
+        // suppresses the pause handler specifically during that buffering window
+        // (belt-and-suspenders, in case a browser fires `pause` while stalling).
+        //
+        // We also stamp every outgoing sync event with a timestamp and ignore
+        // incoming events older than the last one we already applied, so a
+        // stale/out-of-order event from a laggy connection can't undo a newer one.
+        // =========================================================================
+
         function beginSeekSync(targetTime, shouldPlay) {
-            isSyncing = true; seekInProgress = true;
+            isSyncing = true;
+            seekInProgress = true;
+
             const clearSyncFlags = () => {
-                isSyncing = false; seekInProgress = false;
+                isSyncing = false;
+                seekInProgress = false;
                 videoElement.removeEventListener('playing', onCaughtUp);
                 videoElement.removeEventListener('canplay', onCaughtUpIfNotPlaying);
             };
+
             const onCaughtUp = () => clearSyncFlags();
-            const onCaughtUpIfNotPlaying = () => { if (!shouldPlay) clearSyncFlags(); };
+            const onCaughtUpIfNotPlaying = () => {
+                // if we're not supposed to end up playing, "canplay" is our signal that
+                // the seek itself has settled (buffered enough to show the frame)
+                if (!shouldPlay) clearSyncFlags();
+            };
+
             videoElement.addEventListener('playing', onCaughtUp);
             videoElement.addEventListener('canplay', onCaughtUpIfNotPlaying);
+
             player.currentTime = targetTime;
-            if (shouldPlay) attemptPlayWithFallback(); else player.pause();
+            if (shouldPlay) {
+                attemptPlayWithFallback();
+            } else {
+                player.pause();
+            }
+
+            // safety net: never leave the flags stuck forever if neither event fires
+            // (e.g. a broken/unreachable stream) — 8s is generous enough to cover
+            // real buffering without masking a real re-broadcast for too long.
             setTimeout(clearSyncFlags, 8000);
         }
-        function stampedPayload(extra) { const ts = Date.now(); lastSyncEventTs = ts; return Object.assign({ ts }, extra); }
-        function isStaleEvent(data) { return typeof data.ts === 'number' && data.ts < lastSyncEventTs; }
+
+        function stampedPayload(extra) {
+            const ts = Date.now();
+            lastSyncEventTs = ts;
+            return Object.assign({ ts }, extra);
+        }
+
+        function isStaleEvent(data) {
+            return typeof data.ts === 'number' && data.ts < lastSyncEventTs;
+        }
 
         watchChannel.bind('client-video-play', (data) => {
             if (isStaleEvent(data)) return;
             if (typeof data.ts === 'number') lastSyncEventTs = data.ts;
             const needsSeek = Math.abs(player.currentTime - data.time) > 1.2;
-            if (needsSeek) beginSeekSync(data.time, true); else if (!isSyncing) player.play();
+            if (needsSeek) {
+                beginSeekSync(data.time, true);
+            } else {
+                if (!isSyncing) player.play();
+            }
         });
+
         watchChannel.bind('client-video-pause', (data) => {
             if (isStaleEvent(data)) return;
             if (typeof data.ts === 'number') lastSyncEventTs = data.ts;
             const needsSeek = Math.abs(player.currentTime - data.time) > 1.2;
-            if (needsSeek) beginSeekSync(data.time, false); else player.pause();
+            if (needsSeek) {
+                beginSeekSync(data.time, false);
+            } else {
+                player.pause();
+            }
         });
 
         watchChannel.bind('client-global-track', (data) => {
@@ -513,17 +579,18 @@
                     hlsInstance.audioTrack = data.trackId;
                     currentAudioTrackId = data.trackId;
                     document.getElementById('audioTrackSelect').value = data.trackId;
-                    appendMessage(\"System\", `Room audio switched to track ${data.trackId}`);
+                    appendMessage("System", `Room audio switched to track ${data.trackId}`);
                 }
             } else if (data.type === 'caption') {
                 selectSubtitleTrack(data.trackId, false);
             } else if (data.type === 'subdelay') {
                 subDelayOffset = data.value;
                 syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
-                renderCaptionsAtCurrentTime();
+                applySubtitleOffsetToCues();
             }
         });
 
+        // A host adding a subtitle by URL is broadcast so everyone gets the same track automatically
         watchChannel.bind('client-subtitle-url', (data) => {
             addSubtitleTrackFromUrl(data.url, data.label, false, data.isSrt);
         });
@@ -532,15 +599,44 @@
             if (!player.playing || isSyncing) return;
             const absoluteDelta = data.time - player.currentTime;
             const badge = document.getElementById('latencyBadge');
-            if (absoluteDelta > 1.5) { badge.innerText = `${absoluteDelta.toFixed(1)}s behind`; badge.style.display = 'inline-block'; }
-            else badge.style.display = 'none';
+            if (absoluteDelta > 1.5) {
+                badge.innerText = `${absoluteDelta.toFixed(1)}s behind`;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
         });
 
-        player.on('play', () => { if (isSyncing) return; watchChannel.trigger('client-video-play', stampedPayload({ time: player.currentTime })); startHeartbeatBroadcast(); });
-        player.on('pause', () => { if (isSyncing || seekInProgress) return; watchChannel.trigger('client-video-pause', stampedPayload({ time: player.currentTime })); clearInterval(localHeartbeatInterval); });
+        player.on('play', () => {
+            if (isSyncing) return;
+            watchChannel.trigger('client-video-play', stampedPayload({ time: player.currentTime }));
+            startHeartbeatBroadcast();
+        });
 
+        player.on('pause', () => {
+            // Never rebroadcast a pause caused by our own in-flight seek/buffering —
+            // this is the fix for the "freezes everyone" bug described above.
+            if (isSyncing || seekInProgress) return;
+            watchChannel.trigger('client-video-pause', stampedPayload({ time: player.currentTime }));
+            clearInterval(localHeartbeatInterval);
+        });
+
+        // Track where the person actually dragged to (updates continuously while
+        // scrubbing) so we can sanity-check where the seek actually landed.
         let lastSeekTargetHint = null;
-        player.on('seeking', () => { lastSeekTargetHint = player.currentTime; });
+
+        player.on('seeking', () => {
+            lastSeekTargetHint = player.currentTime;
+        });
+
+        // Broadcast off the real `seeked` completion event instead of a flat timer
+        // guessing when the seek is "probably done" — and validate the landed
+        // position against where the person actually dragged to. Some video hosts
+        // don't properly support HTTP range requests, which can make the browser
+        // silently snap back to 0:00 instead of honoring the seek; broadcasting
+        // that bad position uncorrected would spread the reset to everyone else in
+        // the room. If that mismatch is detected, we skip the broadcast and tell
+        // the person instead of corrupting sync for the whole room.
         player.on('seeked', () => {
             if (isSyncing) return;
             clearTimeout(updateTimeout);
@@ -548,30 +644,46 @@
                 const actual = player.currentTime;
                 const target = lastSeekTargetHint;
                 if (target !== null && target > 5 && actual < 1.5) {
-                    appendMessage(\"System\", \"This video source doesn't seem to support jumping — it reset to the start.\");
+                    appendMessage("System", "This video source doesn't seem to support jumping to a new position (the host may not support seeking) — it reset to the start instead of where you clicked.");
                     return;
                 }
-                const eventName = player.playing ? 'client-video-play' : 'client-video-pause';
+                // Preserve whatever the play/pause state was *before* this seek —
+                // dragging the scrub bar while paused should stay paused for
+                // everyone, not force playback to start (old behavior always
+                // triggered client-video-play here, which force-played on scrub).
+                const wasPlaying = player.playing;
+                const eventName = wasPlaying ? 'client-video-play' : 'client-video-pause';
                 watchChannel.trigger(eventName, stampedPayload({ time: actual }));
             }, 150);
         });
+
         function startHeartbeatBroadcast() {
             clearInterval(localHeartbeatInterval);
             localHeartbeatInterval = setInterval(() => {
-                if (player.playing && !isSyncing) watchChannel.trigger('client-heartbeat', { time: player.currentTime });
+                if (player.playing && !isSyncing) {
+                    watchChannel.trigger('client-heartbeat', { time: player.currentTime });
+                }
             }, 3000);
         }
+
+        // Sync button = pull the OTHER person's current time to yourself (not push
+        // yours to them). We mark that we're waiting for a response, then apply
+        // only the first matching reply — since every other client in the room
+        // answers a status request, this stops duplicate responses from re-seeking
+        // the same person over and over.
         let awaitingManualSync = false;
+
         function requestRoomSync() {
             awaitingManualSync = true;
             watchChannel.trigger('client-request-status', { from: currentUsername });
             document.getElementById('latencyBadge').style.display = 'none';
-            appendMessage(\"System\", \"Requesting the room's current playback position...\");
+            appendMessage("System", "Requesting the room's current playback position...");
+            // if nobody answers (e.g. you're alone in the room), stop waiting after a bit
             setTimeout(() => { awaitingManualSync = false; }, 5000);
         }
 
         // =========================================================================
-        // MEDIA LOADING (unchanged)
+        // MEDIA LOADING
         // =========================================================================
         function loadNewVideo() {
             const targetUrl = document.getElementById('videoUrlInput').value.trim();
@@ -579,42 +691,64 @@
             processMediaParsing(targetUrl);
             watchChannel.trigger('client-video-play', stampedPayload({ time: 0 }));
         }
+
         function resetSubtitleAndAudioUI() {
-            document.getElementById('subtitleTrackSelectFs').innerHTML = '<option value=\"-1\">Subtitles: Off</option>';
+            document.getElementById('subtitleTrackSelectFs').innerHTML = '<option value="-1">Subtitles: Off</option>';
             document.getElementById('audioTrackSelect').innerHTML = '';
             document.getElementById('audioTrackPanel').style.display = 'none';
+            currentSubtitleTrackId = -1;
             currentAudioTrackId = -1;
-            // Note: subtitleCueTracks are preserved intentionally (someone may load subs before the video).
+            subDelayOffset = 0.0;
+            syncSubtitleLabel('lblSubDelayFs', 0);
         }
+
+        // Surface *why* a video failed to load instead of it just sitting there
+        // silently — common causes: the link points to an HTML landing page
+        // instead of the raw file (Google Drive/Mega/etc. share links), the host
+        // blocks cross-origin loading, or it's an unsupported codec (e.g. HEVC in
+        // an MKV, which browsers generally can't play at all).
         videoElement.addEventListener('error', () => {
             const err = videoElement.error;
-            let reason = \"Unknown playback error.\";
+            let reason = "Unknown playback error.";
             if (err) {
-                if (err.code === err.MEDIA_ERR_SRC_NOT_SUPPORTED) reason = \"This link isn't a playable video file — landing page or blocked host.\";
-                else if (err.code === err.MEDIA_ERR_NETWORK) reason = \"Network error loading the video.\";
-                else if (err.code === err.MEDIA_ERR_DECODE) reason = \"This browser can't decode this video's format/codec.\";
+                if (err.code === err.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+                    reason = "This link isn't a playable video file — it may be a landing/download page rather than a direct link, or the host doesn't allow this site to load it.";
+                } else if (err.code === err.MEDIA_ERR_NETWORK) {
+                    reason = "Network error loading the video — the host may not support the request or blocked it.";
+                } else if (err.code === err.MEDIA_ERR_DECODE) {
+                    reason = "This browser can't decode this video's format/codec (common with certain MKV/HEVC files).";
+                }
             }
-            appendMessage(\"System\", `Couldn't play this link: ${reason}`);
+            appendMessage("System", `Couldn't play this link: ${reason}`);
         });
+
         function processMediaParsing(url, executionCallback = null) {
             if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
             resetSubtitleAndAudioUI();
             activeVideoUrl = url;
             document.getElementById('videoUrlInput').value = url;
-            const ytMatch = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+
+            const ytRegExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const ytMatch = url.match(ytRegExp);
+
             if (ytMatch && ytMatch[2] && ytMatch[2].length === 11) {
                 player.source = { type: 'video', sources: [{ src: ytMatch[2], provider: 'youtube' }] };
-                appendMessage(\"System\", \"Loaded YouTube video.\");
+                appendMessage("System", "Loaded YouTube video.");
                 if (executionCallback) executionCallback();
             } else if (url.includes('.m3u8')) {
                 if (Hls.isSupported()) {
                     hlsInstance = new Hls();
                     hlsInstance.loadSource(url);
                     hlsInstance.attachMedia(videoElement);
-                    hlsInstance.on(Hls.Events.ERROR, (ev, data) => { if (data.fatal) appendMessage(\"System\", `HLS error: ${data.details}`); });
+                    hlsInstance.on(Hls.Events.ERROR, (ev, data) => {
+                        if (data.fatal) {
+                            appendMessage("System", `Couldn't play this HLS stream (${data.details}) — the link or host may not be reachable/supported.`);
+                        }
+                    });
                     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-                        appendMessage(\"System\", \"HLS stream loaded.\");
+                        appendMessage("System", "HLS stream loaded — checking for embedded audio/subtitle tracks.");
                         populateHlsAudioTracks();
+                        populateEmbeddedSubtitles();
                         hlsInstance.on(Hls.Events.AUDIO_TRACK_SWITCHED, (ev, data) => {
                             currentAudioTrackId = data.id;
                             watchChannel.trigger('client-global-track', { type: 'audio', trackId: data.id });
@@ -627,23 +761,28 @@
                 }
             } else {
                 player.source = { type: 'video', sources: [{ src: url }] };
-                appendMessage(\"System\", \"Loaded video file.\");
+                appendMessage("System", "Loaded video file.");
+                // give the browser a beat to parse any in-container text tracks, then refresh the menu
+                setTimeout(populateEmbeddedSubtitles, 500);
                 if (executionCallback) executionCallback();
             }
         }
+
         function populateHlsAudioTracks() {
             if (!hlsInstance || !hlsInstance.audioTracks || hlsInstance.audioTracks.length <= 1) return;
             const sel = document.getElementById('audioTrackSelect');
             sel.innerHTML = '';
             hlsInstance.audioTracks.forEach((track, idx) => {
                 const opt = document.createElement('option');
-                opt.value = idx; opt.text = track.name || track.lang || `Track ${idx}`;
+                opt.value = idx;
+                opt.text = track.name || track.lang || `Track ${idx}`;
                 sel.appendChild(opt);
             });
             sel.value = hlsInstance.audioTrack;
             currentAudioTrackId = hlsInstance.audioTrack;
             document.getElementById('audioTrackPanel').style.display = 'block';
         }
+
         function selectAudioTrack(idx, broadcast) {
             idx = parseInt(idx, 10);
             if (hlsInstance) hlsInstance.audioTrack = idx;
@@ -652,148 +791,130 @@
         }
 
         // =========================================================================
-        // SUBTITLES — FIXED
+        // SUBTITLES: embedded detection, URL add, file upload, timing/style, sync
         //
-        // Rendering is now done from a parsed cue array via #customCaptions,
-        // because Plyr's built-in <track> pipeline was silently dropping
-        // dynamically-added tracks (and remote URLs need CORS to render anyway).
-        // The public function names below are the SAME ones your code already
-        // calls (`addSubtitleTrackFromUrl`, `selectSubtitleTrack`, `convertSrtToVtt`,
-        // `applySubtitleOffsetToCues`), so nothing else in the file changed.
+        // Two bugs fixed here:
+        // 1) Selection now goes through Plyr's own captions API (player.currentTrack
+        //    / player.toggleCaptions) instead of only setting the native
+        //    textTrack.mode directly — Plyr manages its own captions render state
+        //    (.plyr__captions) and was ignoring/overriding the manual mode flips,
+        //    which is why subtitles loaded but never actually appeared on screen.
+        // 2) .srt files are not natively renderable by <track> (browsers only
+        //    understand WebVTT) — they now get converted to VTT in-browser before
+        //    being attached, for both uploads and pasted URLs.
         // =========================================================================
-        const subtitleCueTracks = []; // [{ label, cues: [{start,end,text}] }]
-
-        function parseVttToCues(vttText) {
-            const cleaned = vttText.replace(/^\uFEFF/, '').replace(/
-+/g, '');
-            const lines = cleaned.split('
-');
-            const cues = [];
-            let i = 0;
-            if (lines[0] && lines[0].toUpperCase().startsWith('WEBVTT')) {
-                while (i < lines.length && lines[i].trim() !== '') i++;
-            }
-            while (i < lines.length) {
-                while (i < lines.length && lines[i].trim() === '') i++;
-                if (i >= lines.length) break;
-                if (/^(NOTE|STYLE|REGION)\b/i.test(lines[i].trim())) {
-                    while (i < lines.length && lines[i].trim() !== '') i++;
-                    continue;
-                }
-                let timingLine = lines[i];
-                if (!timingLine.includes('-->')) { i++; if (i >= lines.length) break; timingLine = lines[i]; }
-                if (!timingLine.includes('-->')) { i++; continue; }
-                i++;
-                const m = timingLine.match(/(\d{1,2}:)?(\d{1,2}):(\d{1,2})[.,](\d{1,3})\s*-->\s*(\d{1,2}:)?(\d{1,2}):(\d{1,2})[.,](\d{1,3})/);
-                if (!m) continue;
-                const toSec = (h, mn, s, ms) => (parseInt(h||'0',10)*3600)+(parseInt(mn,10)*60)+parseInt(s,10)+(parseInt(ms,10)/Math.pow(10, ms.length));
-                const start = toSec(m[1]?m[1].replace(':',''):'0', m[2], m[3], m[4]);
-                const end   = toSec(m[5]?m[5].replace(':',''):'0', m[6], m[7], m[8]);
-                const textLines = [];
-                while (i < lines.length && lines[i].trim() !== '') { textLines.push(lines[i]); i++; }
-                const text = textLines.join('
-').replace(/\{[^}]*\}/g, '').replace(/<[^>]+>/g, '').trim();
-                if (text) cues.push({ start, end, text });
-            }
-            return cues;
-        }
 
         function refreshSubtitleMenu() {
             const sel = document.getElementById('subtitleTrackSelectFs');
-            sel.innerHTML = '<option value=\"-1\">Subtitles: Off</option>';
-            subtitleCueTracks.forEach((t, i) => {
+            sel.innerHTML = '<option value="-1">Subtitles: Off</option>';
+            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                const t = videoElement.textTracks[i];
                 const opt = document.createElement('option');
-                opt.value = i; opt.text = t.label || `Track ${i}`;
+                opt.value = i;
+                opt.text = t.label || t.language || `Track ${i}`;
                 sel.appendChild(opt);
-            });
+            }
             sel.value = currentSubtitleTrackId;
         }
-        function populateEmbeddedSubtitles() { refreshSubtitleMenu(); }
+
+        function populateEmbeddedSubtitles() {
+            // Covers HLS embedded WebVTT tracks and any <track> elements already parsed
+            refreshSubtitleMenu();
+        }
 
         function selectSubtitleTrack(idx, broadcast) {
             idx = parseInt(idx, 10);
             currentSubtitleTrackId = idx;
+
+            // Drive selection through Plyr's captions system instead of only
+            // flipping native textTrack.mode — Plyr owns the actual on-screen
+            // rendering (.plyr__captions) and will otherwise ignore/override a
+            // manual mode change, which is why captions previously loaded but
+            // never displayed.
+            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                videoElement.textTracks[i].mode = (i === idx) ? 'showing' : 'disabled';
+            }
+            if (idx === -1) {
+                player.toggleCaptions(false);
+            } else {
+                player.currentTrack = idx;
+                player.toggleCaptions(true);
+            }
+
             document.getElementById('subtitleTrackSelectFs').value = idx;
-            if (idx === -1) captionsOverlay.innerHTML = '';
-            renderCaptionsAtCurrentTime();
             if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
         }
 
-        function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-        function renderCaptionsAtCurrentTime() {
-            if (currentSubtitleTrackId < 0 || currentSubtitleTrackId >= subtitleCueTracks.length) {
-                if (captionsOverlay.innerHTML) captionsOverlay.innerHTML = '';
-                return;
-            }
-            const t = videoElement.currentTime - subDelayOffset;
-            const cues = subtitleCueTracks[currentSubtitleTrackId].cues;
-            let activeText = '';
-            for (let i = 0; i < cues.length; i++) {
-                const c = cues[i];
-                if (t >= c.start && t <= c.end) { activeText = c.text; break; }
-                if (c.start > t) break;
-            }
-            if (activeText) {
-                const html = activeText.split('
-').map(l => `<span class=\"cap-line\">${escapeHtml(l)}</span>`).join('<br>');
-                if (captionsOverlay.innerHTML !== html) captionsOverlay.innerHTML = html;
-            } else if (captionsOverlay.innerHTML) {
-                captionsOverlay.innerHTML = '';
-            }
+        // ---- SRT -> VTT conversion ----
+        function srtTimeToVtt(t) {
+            return t.replace(',', '.');
         }
-        videoElement.addEventListener('timeupdate', renderCaptionsAtCurrentTime);
-        (function tick() { renderCaptionsAtCurrentTime(); requestAnimationFrame(tick); })();
 
         function convertSrtToVtt(srtText) {
-            const normalized = srtText.replace(/^\uFEFF/,'').replace(/
-+/g, '').trim();
-            const blocks = normalized.split(/
-
-+/);
+            // Normalize line endings, strip numeric cue-index lines, convert
+            // "00:00:01,000 --> 00:00:02,000" timestamps to VTT's dot-separated form,
+            // and prepend the required "WEBVTT" header.
+            const normalized = srtText.replace(/\r+/g, '').trim();
+            const blocks = normalized.split(/\n\n+/);
             const vttBlocks = blocks.map(block => {
-                const lines = block.split('
-').filter(l => l.trim() !== '');
-                if (lines.length && /^\d+$/.test(lines[0].trim())) lines.shift();
-                return lines.map(line => line.includes('-->')
-                    ? line.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, (m, hms, ms) => `${hms}.${ms}`)
-                    : line).join('
-');
-            }).filter(b => b.trim() !== '');
-            return 'WEBVTT
-
-' + vttBlocks.join('
-
-');
-        }
-        function isLikelySrt(url, filename) { return (filename || url || '').toLowerCase().endsWith('.srt'); }
-
-        // Kept the same name so the rest of the code (broadcast handler, URL button)
-        // calls into it unchanged. Now it fetches → parses → renders via overlay.
-        function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
-            const finish = (rawText) => {
-                const vttText = isSrt ? convertSrtToVtt(rawText) : rawText;
-                const cues = parseVttToCues(vttText);
-                if (!cues.length) { appendMessage(\"System\", `Couldn't parse subtitle \"${label}\".`); return; }
-                subtitleCueTracks.push({ label: label || 'Subtitle', cues });
-                refreshSubtitleMenu();
-                selectSubtitleTrack(subtitleCueTracks.length - 1, false);
-                appendMessage(\"System\", `Subtitle \"${label}\" loaded (${cues.length} lines)${broadcast ? ' — sharing with the room' : ''}.`);
-                if (broadcast) {
-                    // Share the actual text so remote peers don't need to fetch the URL themselves (avoids CORS).
-                    broadcastSubtitleText(vttText, label);
+                const lines = block.split('\n').filter(line => line.trim() !== '');
+                // drop a leading pure-numeric cue index line, if present
+                if (lines.length && /^\d+$/.test(lines[0].trim())) {
+                    lines.shift();
                 }
-            };
-            // If the caller passed a blob: URL (from a local upload's broadcast receiver replay),
-            // just read from the URL directly. Otherwise fetch as text (converts CORS failure
-            // into a clear message instead of a silently-invisible track).
-            fetch(url).then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.text();
-            }).then(finish).catch(err => {
-                appendMessage(\"System\", `Couldn't load subtitle \"${label}\": ${err.message}. The host may block cross-origin access — try uploading the file instead.`);
-            });
+                return lines.map((line, i) => {
+                    if (i === 0 || line.includes('-->')) {
+                        return line.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, (m, hms, ms) => `${hms}.${ms}`);
+                    }
+                    return line;
+                }).join('\n');
+            }).filter(b => b.trim() !== '');
+            return 'WEBVTT\n\n' + vttBlocks.join('\n\n');
         }
+
+        function isLikelySrt(url, filename) {
+            const target = (filename || url || '').toLowerCase();
+            return target.endsWith('.srt');
+        }
+
+        function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
+            const trackNode = document.createElement('track');
+            trackNode.kind = 'subtitles';
+            trackNode.label = label || 'Subtitle';
+            trackNode.srclang = 'ext';
+
+            if (isSrt) {
+                // Fetch + convert remote SRT files to a VTT blob URL, since <track>
+                // can only render WebVTT natively.
+                fetch(url)
+                    .then(res => {
+                        if (!res.ok) throw new Error('Failed to fetch subtitle file');
+                        return res.text();
+                    })
+                    .then(srtText => {
+                        const vttBlob = new Blob([convertSrtToVtt(srtText)], { type: 'text/vtt' });
+                        trackNode.src = URL.createObjectURL(vttBlob);
+                        videoElement.appendChild(trackNode);
+                        setTimeout(() => {
+                            refreshSubtitleMenu();
+                            appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
+                        }, 400);
+                    })
+                    .catch(err => {
+                        appendMessage("System", `Couldn't load subtitle "${label}" — the source may not allow cross-origin access.`);
+                    });
+            } else {
+                trackNode.src = url;
+                videoElement.appendChild(trackNode);
+                setTimeout(() => {
+                    refreshSubtitleMenu();
+                    appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
+                }, 400);
+            }
+
+            if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label, isSrt: !!isSrt });
+        }
+
         function ingestSubtitleFromUrl() {
             const input = document.getElementById('subtitleUrlInputFs');
             const url = input.value.trim();
@@ -803,21 +924,44 @@
             input.value = '';
         }
 
-        // Room broadcast (unchanged shape)
-        const SUBTITLE_CHUNK_SIZE = 7000;
+        // =========================================================================
+        // SHARE AN UPLOADED SUBTITLE WITH THE ROOM
+        //
+        // A local upload only ever produces a blob: URL, which is meaningless
+        // outside your own browser's memory — there's no "link" to send anyone.
+        // The only way to actually share it is to send the subtitle TEXT itself
+        // over the realtime channel and have everyone else build their own local
+        // copy from it.
+        //
+        // Pusher client events cap out around 10KB per message, and a real
+        // subtitle file for a full episode is commonly 20-150KB — well over that.
+        // So we split the (already-VTT-converted) text into small chunks, send
+        // them as a numbered sequence a little apart (to stay under Pusher's
+        // client-event rate limit), and reassemble them on the receiving side
+        // before building a local blob track from the full text.
+        // =========================================================================
+        const SUBTITLE_CHUNK_SIZE = 7000; // chars — safely under Pusher's ~10KB cap including JSON overhead
         const incomingSubtitleTransfers = {};
+
         function showSubtitleSyncBadge(text) {
             const badge = document.getElementById('subtitleSyncBadge');
             const label = document.getElementById('subtitleSyncBadgeText');
             if (label) label.textContent = text;
             if (badge) badge.style.display = 'flex';
         }
-        function hideSubtitleSyncBadge() { const badge = document.getElementById('subtitleSyncBadge'); if (badge) badge.style.display = 'none'; }
+
+        function hideSubtitleSyncBadge() {
+            const badge = document.getElementById('subtitleSyncBadge');
+            if (badge) badge.style.display = 'none';
+        }
+
         function broadcastSubtitleText(vttText, label) {
             const transferId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
             const chunks = [];
-            for (let i = 0; i < vttText.length; i += SUBTITLE_CHUNK_SIZE) chunks.push(vttText.slice(i, i + SUBTITLE_CHUNK_SIZE));
-            showSubtitleSyncBadge(`Sending \"${label}\" to everyone...`);
+            for (let i = 0; i < vttText.length; i += SUBTITLE_CHUNK_SIZE) {
+                chunks.push(vttText.slice(i, i + SUBTITLE_CHUNK_SIZE));
+            }
+            showSubtitleSyncBadge(`Sending "${label}" to everyone...`);
             chunks.forEach((chunk, idx) => {
                 setTimeout(() => {
                     watchChannel.trigger('client-subtitle-chunk', { transferId, index: idx, total: chunks.length, label, chunk });
@@ -825,20 +969,23 @@
                 }, idx * 120);
             });
         }
+
         watchChannel.bind('client-subtitle-chunk', (data) => {
-            let t = incomingSubtitleTransfers[data.transferId];
-            if (!t) {
-                t = incomingSubtitleTransfers[data.transferId] = { parts: new Array(data.total), received: 0, total: data.total, label: data.label };
-                appendMessage(\"System\", `Receiving subtitle \"${data.label}\"...`);
+            let transfer = incomingSubtitleTransfers[data.transferId];
+            if (!transfer) {
+                transfer = incomingSubtitleTransfers[data.transferId] = { parts: new Array(data.total), received: 0, total: data.total, label: data.label };
+                appendMessage("System", `Receiving subtitle "${data.label}" from the room...`);
             }
-            if (t.parts[data.index] === undefined) { t.parts[data.index] = data.chunk; t.received++; }
-            showSubtitleSyncBadge(`Syncing subtitle \"${t.label}\"... ${t.received}/${t.total}`);
-            if (t.received === t.total) {
+            if (transfer.parts[data.index] === undefined) {
+                transfer.parts[data.index] = data.chunk;
+                transfer.received++;
+            }
+            showSubtitleSyncBadge(`Syncing subtitle "${transfer.label}"... ${transfer.received}/${transfer.total}`);
+            if (transfer.received === transfer.total) {
                 hideSubtitleSyncBadge();
-                const fullText = t.parts.join('');
-                const cues = parseVttToCues(fullText);
-                if (cues.length) { subtitleCueTracks.push({ label: t.label, cues }); refreshSubtitleMenu(); appendMessage(\"System\", `Subtitle \"${t.label}\" received (${cues.length} lines).`); }
-                else appendMessage(\"System\", `Received subtitle \"${t.label}\" but couldn't parse it.`);
+                const fullText = transfer.parts.join('');
+                const vttBlob = new Blob([fullText], { type: 'text/vtt' });
+                addSubtitleTrackFromUrl(URL.createObjectURL(vttBlob), transfer.label, false, false);
                 delete incomingSubtitleTransfers[data.transferId];
             }
         });
@@ -848,132 +995,198 @@
             if (!nativeFile) return;
             const isSrt = isLikelySrt('', nativeFile.name);
             const label = nativeFile.name.replace(/\.(vtt|srt)$/i, '');
+
             const reader = new FileReader();
             reader.onload = () => {
                 const vttText = isSrt ? convertSrtToVtt(reader.result) : reader.result;
-                const cues = parseVttToCues(vttText);
-                if (!cues.length) { appendMessage(\"System\", `Couldn't parse \"${label}\".`); return; }
-                subtitleCueTracks.push({ label, cues });
-                refreshSubtitleMenu();
-                selectSubtitleTrack(subtitleCueTracks.length - 1, false);
-                appendMessage(\"System\", `Subtitle \"${label}\" loaded (${cues.length} lines). Sharing with the room...`);
+                const vttBlob = new Blob([vttText], { type: 'text/vtt' });
+                const localBlobUrl = URL.createObjectURL(vttBlob);
+                addSubtitleTrackFromUrl(localBlobUrl, label, false, false);
+                appendMessage("System", `Sharing subtitle "${label}" with the room...`);
                 broadcastSubtitleText(vttText, label);
             };
             reader.readAsText(nativeFile);
-            uploaderNode.value = '';
         }
 
-        // Kept as a no-op — offset is now applied at render lookup time (currentTime - subDelayOffset)
-        // instead of mutating cue times, which some browsers reject anyway.
-        function applySubtitleOffsetToCues() { renderCaptionsAtCurrentTime(); }
-
-        function syncSubtitleLabel(baseId, value) { const el = document.getElementById(baseId); if (el) el.innerText = `Timing: ${value.toFixed(1)}s`; }
-        function adjustSubtitleTiming(stepDelta) {
-            subDelayOffset += stepDelta;
-            syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
-            renderCaptionsAtCurrentTime();
-            watchChannel.trigger('client-global-track', { type: 'subdelay', value: subDelayOffset });
-        }
-        function adjustSubtitleStyling(property, modificationDelta) {
-            const rootEl = document.documentElement;
-            if (property === 'size') {
-                subSizePx = Math.max(10, Math.min(48, subSizePx + modificationDelta));
-                rootEl.style.setProperty('--sub-size-val', `${subSizePx}px`);
-                document.getElementById('lblSubSizeFs').innerText = `Size: ${subSizePx}px`;
-            } else if (property === 'pos') {
-                subPositionLift += modificationDelta;
-                rootEl.style.setProperty('--sub-pos-val', `${subPositionLift}px`);
-                document.getElementById('lblSubPosFs').innerText = `Lift: ${subPositionLift}px`;
-            } else if (property === 'opacity') {
-                subOpacityFloat = Math.max(0.1, Math.min(1.0, subOpacityFloat + modificationDelta));
-                rootEl.style.setProperty('--sub-opacity-val', subOpacityFloat.toFixed(1));
-                document.getElementById('lblSubOpacityFs').innerText = `Opacity: ${subOpacityFloat.toFixed(1)}`;
+        function applySubtitleOffsetToCues() {
+            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                let currentTrack = videoElement.textTracks[i];
+                if (currentTrack.cues) {
+                    for (let j = 0; j < currentTrack.cues.length; j++) {
+                        let singleCue = currentTrack.cues[j];
+                        if (singleCue.baseStart === undefined) {
+                            singleCue.baseStart = singleCue.startTime;
+                            singleCue.baseEnd = singleCue.endTime;
+                        }
+                        singleCue.startTime = singleCue.baseStart + subDelayOffset;
+                        singleCue.endTime = singleCue.baseEnd + subDelayOffset;
+                    }
+                }
             }
         }
 
-        // ===== Chat / overlays (unchanged) =====
+        function syncSubtitleLabel(baseId, value) {
+            const el = document.getElementById(baseId);
+            if (el) el.innerText = `Timing: ${value.toFixed(1)}s`;
+        }
+
+        function adjustSubtitleTiming(stepDelta) {
+            subDelayOffset += stepDelta;
+            syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
+            applySubtitleOffsetToCues();
+            watchChannel.trigger('client-global-track', { type: 'subdelay', value: subDelayOffset });
+        }
+
+        function adjustSubtitleStyling(property, modificationDelta) {
+            const element = document.querySelector('.plyr');
+            if (!element) return;
+            if (property === 'size') {
+                subSizePx = Math.max(10, Math.min(42, subSizePx + modificationDelta));
+                element.style.setProperty('--sub-size-val', `${subSizePx}px`);
+                document.getElementById('lblSubSizeFs').innerText = `Size: ${subSizePx}px`;
+            } else if (property === 'pos') {
+                subPositionLift += modificationDelta;
+                element.style.setProperty('--sub-pos-val', `${subPositionLift}px`);
+                document.getElementById('lblSubPosFs').innerText = `Lift: ${subPositionLift}px`;
+            } else if (property === 'opacity') {
+                subOpacityFloat = Math.max(0.1, Math.min(1.0, subOpacityFloat + modificationDelta));
+                element.style.setProperty('--sub-opacity-val', subOpacityFloat.toFixed(1));
+                document.getElementById('lblSubOpacityFs').innerText = `Opacity: ${subOpacityFloat.toFixed(1)}`;
+            }
+            // subtitle look/position is a personal display preference, not synced across the room on purpose
+        }
+
+        // =========================================================================
+        // CHAT + FULLSCREEN OVERLAYS
+        // =========================================================================
         watchChannel.bind('client-chat-msg', (data) => {
             appendMessage(data.user, data.text);
             if (floatingToastActive) renderFloatingFullscreenToast(data.user, data.text);
         });
+
         function transmitMessage(isFullscreenSource) {
             const inputField = isFullscreenSource ? document.getElementById('fullscreenChatInput') : document.getElementById('sidebarChatInput');
             const plaintext = inputField.value.trim();
             if (!plaintext) return;
+
             watchChannel.trigger('client-chat-msg', { user: currentUsername, text: plaintext });
             appendMessage(currentUsername + ' (You)', plaintext);
             if (isFullscreenSource && floatingToastActive) renderFloatingFullscreenToast(currentUsername + ' (You)', plaintext);
             inputField.value = '';
         }
+
         function appendMessage(author, string) {
             const textPanel = document.getElementById('chatLog');
             const containerBubble = document.createElement('div');
             containerBubble.className = 'message-bubble';
             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            containerBubble.innerHTML = `<div class=\"message-header\"><span class=\"message-author\"></span><span class=\"message-time\"></span></div><div></div>`;
+            containerBubble.innerHTML = `<div class="message-header"><span class="message-author"></span><span class="message-time"></span></div><div></div>`;
             containerBubble.querySelector('.message-author').textContent = author;
             containerBubble.querySelector('.message-time').textContent = timestamp;
             containerBubble.querySelector('div:last-child').textContent = string;
             textPanel.appendChild(containerBubble);
             textPanel.scrollTop = textPanel.scrollHeight;
         }
+
         function renderFloatingFullscreenToast(sender, payload) {
             const toastFrame = document.getElementById('toastLayer');
-            const t = document.createElement('div');
-            t.className = 'floating-toast';
-            const strong = document.createElement('strong'); strong.textContent = sender + ': ';
-            t.appendChild(strong); t.appendChild(document.createTextNode(payload));
-            t.addEventListener('click', () => t.remove());
-            toastFrame.appendChild(t);
-            setTimeout(() => t.remove(), 5000);
+            const individualToast = document.createElement('div');
+            individualToast.className = 'floating-toast';
+            const strong = document.createElement('strong');
+            strong.textContent = sender + ': ';
+            individualToast.appendChild(strong);
+            individualToast.appendChild(document.createTextNode(payload));
+            individualToast.addEventListener('click', () => individualToast.remove()); // click to dismiss early
+            toastFrame.appendChild(individualToast);
+            setTimeout(() => individualToast.remove(), 5000);
         }
 
-        // ===== Room / profile =====
+        // =========================================================================
+        // ROOM / PROFILE
+        // =========================================================================
         function updateProfileHandle() {
             const inputVal = document.getElementById('usernameInput').value.trim();
             if (inputVal) {
                 currentUsername = inputVal;
                 localStorage.setItem('party_user', currentUsername);
-                appendMessage(\"System\", `Changed your name to: ${currentUsername}. Others will see the new name after your next reconnect.`);
+                appendMessage("System", `Changed your name to: ${currentUsername}`);
             }
         }
-        function createNewRoom() { window.location.href = `?room=${Math.random().toString(36).substring(2, 13)}`; }
-        function shareActiveRoom() {
-            const url = window.location.href;
-            const finish = () => { if (navigator.share) navigator.share({ title: 'Watch Party Invite', url }).catch(()=>{}); else alert(\"Link copied! Send it to your friend: \" + url); };
-            if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { appendMessage(\"System\", \"Invite link copied to clipboard.\"); finish(); }).catch(finish);
-            else finish();
+
+        function createNewRoom() {
+            const secureUniqueId = Math.random().toString(36).substring(2, 13);
+            window.location.href = `?room=${secureUniqueId}`;
         }
 
+        function shareActiveRoom() {
+            const targetInviteUrl = window.location.href;
+            const finish = () => {
+                if (navigator.share) {
+                    navigator.share({ title: 'Watch Party Invite', url: targetInviteUrl }).catch(() => {});
+                } else {
+                    alert("Link copied! Send it to your friend: " + targetInviteUrl);
+                }
+            };
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(targetInviteUrl).then(() => {
+                    appendMessage("System", "Invite link copied to clipboard.");
+                    finish();
+                }).catch(finish);
+            } else {
+                finish();
+            }
+        }
+
+        // =========================================================================
+        // REAL IN-PLAYER TOGGLE BUTTONS (fixes the old <select> dropdown hack —
+        // these are now genuine buttons sitting in the Plyr control bar itself)
+        // =========================================================================
         function injectCustomPlayerButtons() {
             const controlsGrid = document.querySelector('.plyr__controls');
             if (!controlsGrid) return;
+
             const toastBtn = document.createElement('button');
-            toastBtn.type = 'button'; toastBtn.className = 'custom-player-toggle active';
-            toastBtn.innerHTML = '💬 Floating'; toastBtn.title = 'Toggle floating chat messages';
-            toastBtn.addEventListener('click', () => { floatingToastActive = !floatingToastActive; toastBtn.classList.toggle('active', floatingToastActive); });
+            toastBtn.type = 'button';
+            toastBtn.className = 'custom-player-toggle active';
+            toastBtn.innerHTML = '💬 Floating';
+            toastBtn.title = 'Toggle floating chat messages';
+            toastBtn.addEventListener('click', () => {
+                floatingToastActive = !floatingToastActive;
+                toastBtn.classList.toggle('active', floatingToastActive);
+            });
+
             const inputBtn = document.createElement('button');
-            inputBtn.type = 'button'; inputBtn.className = 'custom-player-toggle';
-            inputBtn.innerHTML = '⌨ Quick Chat'; inputBtn.title = 'Toggle the fullscreen quick-chat box';
-            const subtitleBtn = document.createElement('button');
-            subtitleBtn.type = 'button'; subtitleBtn.className = 'custom-player-toggle';
-            subtitleBtn.innerHTML = '💬 Subtitles'; subtitleBtn.title = 'Toggle subtitle timing & style controls';
+            inputBtn.type = 'button';
+            inputBtn.className = 'custom-player-toggle';
+            inputBtn.innerHTML = '⌨ Quick Chat';
+            inputBtn.title = 'Toggle the fullscreen quick-chat box';
             inputBtn.addEventListener('click', () => {
                 glassInputActive = !glassInputActive;
-                document.getElementById('glassInputLayer').style.display = glassInputActive ? 'block' : 'none';
+                const layer = document.getElementById('glassInputLayer');
+                layer.style.display = glassInputActive ? 'block' : 'none';
                 inputBtn.classList.toggle('active', glassInputActive);
+                // opening one overlay closes the other so they don't stack on top of each other
                 if (glassInputActive && glassSubtitleActive) subtitleBtn.click();
             });
+
+            const subtitleBtn = document.createElement('button');
+            subtitleBtn.type = 'button';
+            subtitleBtn.className = 'custom-player-toggle';
+            subtitleBtn.innerHTML = '💬 Subtitles';
+            subtitleBtn.title = 'Toggle subtitle timing & style controls';
             subtitleBtn.addEventListener('click', () => {
                 glassSubtitleActive = !glassSubtitleActive;
-                document.getElementById('glassSubtitleLayer').style.display = glassSubtitleActive ? 'block' : 'none';
+                const layer = document.getElementById('glassSubtitleLayer');
+                layer.style.display = glassSubtitleActive ? 'block' : 'none';
                 subtitleBtn.classList.toggle('active', glassSubtitleActive);
                 if (glassSubtitleActive && glassInputActive) inputBtn.click();
             });
+
             controlsGrid.appendChild(toastBtn);
             controlsGrid.appendChild(inputBtn);
             controlsGrid.appendChild(subtitleBtn);
         }
+
         document.getElementById('sidebarChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(false); });
         document.getElementById('fullscreenChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(true); });
         document.getElementById('subtitleUrlInputFs').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(); });
