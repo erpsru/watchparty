@@ -50,6 +50,11 @@
         button.ghost { background: rgba(255,255,255,0.08); }
         button.danger { background: var(--sync-color); }
 
+        .member-badge {
+            background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: rgba(255,255,255,0.85);
+            font-size: 0.8rem; padding: 7px 14px; border-radius: 20px; cursor: default; white-space: nowrap;
+        }
+
         .app-container { display: flex; flex: 1; width: 100%; height: calc(100vh - 65px); overflow: hidden; }
 
         .video-section { flex: 3; min-width: 0; display: flex; flex-direction: column; justify-content: center; align-items: stretch; background: #000; position: relative; }
@@ -182,6 +187,28 @@
         }
         .custom-player-toggle.active { background: var(--accent-color) !important; border-color: var(--accent-color) !important; }
 
+        /* ---- Injected "Add Subtitles" pane inside Plyr's native settings gear ----
+           Built with Plyr's own menu markup/classes so it looks like a real tab
+           (Captions/Quality/Speed) rather than a bolted-on box; the pane-switch
+           logic is handled by our own small script since Plyr doesn't expose an
+           API for adding custom settings tabs. */
+        .plyr-native-subtitle-pane-body { padding: 10px 12px 12px; width: 240px; }
+        .plyr-native-subtitle-row { display: flex; gap: 6px; margin-bottom: 8px; }
+        .plyr-native-subtitle-row input[type="text"] {
+            flex: 1; font-size: 0.78rem; padding: 6px 8px; background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15);
+        }
+        .plyr-native-mini-btn {
+            background: var(--accent-color); border: none; color: #fff; font-size: 0.75rem; font-weight: 600;
+            padding: 6px 10px; border-radius: 5px; cursor: pointer; white-space: nowrap;
+        }
+        .plyr-native-mini-btn:disabled { opacity: 0.4; cursor: default; }
+        .plyr-native-file-label {
+            display: block; font-size: 0.75rem; padding: 7px 8px; background: rgba(255,255,255,0.06);
+            border: 1px dashed rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer; text-align: center;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .plyr-native-upload-status { font-size: 0.72rem; color: rgba(255,255,255,0.6); margin-top: 8px; line-height: 1.4; min-height: 14px; }
+
         @media (max-width: 900px) {
             body { overflow-y: auto; height: auto; min-height: 100vh; }
             .app-container { flex-direction: column; height: auto; overflow: visible; }
@@ -209,6 +236,7 @@
             <span class="brand-title">🎬 HBS Pro</span>
             <button class="ghost" onclick="createNewRoom()">🆕 Create New Room</button>
             <button onclick="shareActiveRoom()">🔗 Share Invite Link</button>
+            <span id="memberCountBadge" class="member-badge" title="You">👥 1 online</span>
         </div>
 
         <div class="media-input-wrapper">
@@ -267,18 +295,8 @@
                             <button onclick="adjustSubtitleStyling('opacity', 0.1)">+</button>
                         </div>
                     </div>
-                    <div class="row">
-                        <select id="subtitleTrackSelectFs" onchange="selectSubtitleTrack(this.value, true)">
-                            <option value="-1">Subtitles: Off</option>
-                        </select>
-                    </div>
-                    <div class="row">
-                        <input type="text" id="subtitleUrlInputFs" placeholder="Paste .vtt/.srt subtitle URL">
-                        <button class="ghost" onclick="ingestSubtitleFromUrl()">Add</button>
-                    </div>
-                    <div class="file-upload-btn" style="margin-top:8px;">
-                        📂 Upload Subtitle (.vtt, .srt) — local to you only
-                        <input type="file" id="externalSubFileFs" accept=".vtt,.srt" onchange="ingestExternalSubtitles(this)">
+                    <div style="font-size:0.72rem; color:rgba(255,255,255,0.45); margin-top:10px; line-height:1.4;">
+                        To add or choose a subtitle, use ⚙ Settings → Add Subtitles / Captions on the player controls.
                     </div>
                 </div>
             </div>
@@ -358,8 +376,55 @@
         let glassSubtitleActive = false;
 
         let activeVideoUrl = '';   // the video actually loaded right now (source of truth for late joiners)
-        let currentSubtitleTrackId = -1;
+        let currentSubtitleLabel = null; // tracked by label, not index — indexes aren't guaranteed to
+                                          // line up between two different browsers' textTracks lists
         let currentAudioTrackId = -1;
+        let applyingRemoteCaptionChange = false; // guards against re-broadcasting a change we just applied ourselves
+        let pendingCaptionSelectionOnArrival = null; // a caption a late-joiner should auto-enable once its data arrives
+
+        // ---- Lightweight presence (who else is actually in the room right now) ----
+        // Pusher client events have no delivery receipts and this channel isn't a
+        // "presence-" channel, so there's no built-in member list. This is a small
+        // ping/pong so every browser in the room converges on the same "who's here"
+        // set — used to know how many people a subtitle upload actually needs to
+        // reach, and to show real per-friend sync confirmation instead of a fake
+        // "done" the moment sending finishes.
+        const myClientId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+        const knownMembers = new Map(); // id -> { name, lastSeen }
+
+        function broadcastPresence() {
+            watchChannel.trigger('client-presence', { id: myClientId, name: currentUsername });
+        }
+
+        watchChannel.bind('client-presence', (data) => {
+            if (!data || data.id === myClientId) return;
+            const isNew = !knownMembers.has(data.id);
+            knownMembers.set(data.id, { name: data.name, lastSeen: Date.now() });
+            if (isNew) broadcastPresence(); // reply so a newcomer learns about us too
+            updateMemberBadge();
+        });
+
+        function getActiveMemberIds() {
+            const cutoff = Date.now() - 45000; // drop anyone who hasn't ping'd in 45s (likely left)
+            return Array.from(knownMembers.entries()).filter(([, info]) => info.lastSeen > cutoff).map(([id]) => id);
+        }
+
+        // Hover-tooltip badge showing how many people are in the room and who they
+        // are — the tooltip text (native `title` attribute) refreshes live as
+        // people join, leave (drop off after 45s of no ping), or rename themselves.
+        function updateMemberBadge() {
+            const badge = document.getElementById('memberCountBadge');
+            if (!badge) return;
+            const activeIds = getActiveMemberIds();
+            const otherNames = activeIds.map(id => knownMembers.get(id).name);
+            const total = otherNames.length + 1;
+            badge.textContent = `👥 ${total} online`;
+            badge.title = [`${currentUsername} (You)`, ...otherNames].join('\n');
+        }
+
+        setInterval(broadcastPresence, 15000);
+        setInterval(updateMemberBadge, 5000); // also prunes people who quietly left
+        updateMemberBadge();
 
         const videoElement = document.getElementById('player');
 
@@ -392,6 +457,7 @@
                 plyrContainer.appendChild(document.getElementById('glassInputLayer'));
                 plyrContainer.appendChild(document.getElementById('glassSubtitleLayer'));
                 injectCustomPlayerButtons();
+                injectNativeSubtitleUploadPane();
             }
         });
 
@@ -403,6 +469,7 @@
         // =========================================================================
         watchChannel.bind('pusher:subscription_succeeded', () => {
             appendMessage("System", "Connected to room: " + roomId);
+            broadcastPresence();
             setTimeout(() => {
                 watchChannel.trigger('client-request-status', { from: currentUsername });
             }, 600);
@@ -420,7 +487,7 @@
                     time: player.currentTime,
                     playing: player.playing,
                     audioTrack: currentAudioTrackId,
-                    subtitleTrack: currentSubtitleTrackId,
+                    subtitleLabel: currentSubtitleLabel,
                     subDelayOffset
                 });
             }
@@ -471,6 +538,18 @@
                     beginSeekSync(data.time, data.playing);
                     subDelayOffset = data.subDelayOffset || 0;
                     syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
+                    if (typeof data.audioTrack === 'number' && data.audioTrack >= 0) {
+                        applyAudioTrackWhenReady(data.audioTrack);
+                    }
+                    if (data.subtitleLabel) {
+                        // We don't have this subtitle's actual text yet — nobody sends
+                        // it unprompted to a joiner, since the original upload only
+                        // ever went out once, at upload time. Ask whoever still has
+                        // it cached to resend it, and auto-enable it the moment it lands.
+                        pendingCaptionSelectionOnArrival = data.subtitleLabel;
+                        currentSubtitleLabel = data.subtitleLabel;
+                        requestSubtitleResend(data.subtitleLabel);
+                    }
                 });
                 awaitingManualSync = false;
             } else if (awaitingManualSync && data.url === activeVideoUrl) {
@@ -582,7 +661,7 @@
                     appendMessage("System", `Room audio switched to track ${data.trackId}`);
                 }
             } else if (data.type === 'caption') {
-                selectSubtitleTrack(data.trackId, false);
+                applyRemoteCaptionSelection(data.label);
             } else if (data.type === 'subdelay') {
                 subDelayOffset = data.value;
                 syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
@@ -693,13 +772,16 @@
         }
 
         function resetSubtitleAndAudioUI() {
-            document.getElementById('subtitleTrackSelectFs').innerHTML = '<option value="-1">Subtitles: Off</option>';
+            Array.from(videoElement.querySelectorAll('track')).forEach(t => t.remove());
             document.getElementById('audioTrackSelect').innerHTML = '';
             document.getElementById('audioTrackPanel').style.display = 'none';
-            currentSubtitleTrackId = -1;
+            currentSubtitleLabel = null;
+            pendingCaptionSelectionOnArrival = null;
             currentAudioTrackId = -1;
             subDelayOffset = 0.0;
             syncSubtitleLabel('lblSubDelayFs', 0);
+            const statusValue = document.getElementById('subUploadStatusValue');
+            if (statusValue) statusValue.textContent = 'None yet';
         }
 
         // Surface *why* a video failed to load instead of it just sitting there
@@ -748,7 +830,6 @@
                     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
                         appendMessage("System", "HLS stream loaded — checking for embedded audio/subtitle tracks.");
                         populateHlsAudioTracks();
-                        populateEmbeddedSubtitles();
                         hlsInstance.on(Hls.Events.AUDIO_TRACK_SWITCHED, (ev, data) => {
                             currentAudioTrackId = data.id;
                             watchChannel.trigger('client-global-track', { type: 'audio', trackId: data.id });
@@ -762,8 +843,6 @@
             } else {
                 player.source = { type: 'video', sources: [{ src: url }] };
                 appendMessage("System", "Loaded video file.");
-                // give the browser a beat to parse any in-container text tracks, then refresh the menu
-                setTimeout(populateEmbeddedSubtitles, 500);
                 if (executionCallback) executionCallback();
             }
         }
@@ -790,6 +869,14 @@
             if (broadcast) watchChannel.trigger('client-global-track', { type: 'audio', trackId: idx });
         }
 
+        function applyAudioTrackWhenReady(idx, attempts = 0) {
+            if (hlsInstance && hlsInstance.audioTracks && hlsInstance.audioTracks.length > idx) {
+                selectAudioTrack(idx, false);
+            } else if (attempts < 10) {
+                setTimeout(() => applyAudioTrackWhenReady(idx, attempts + 1), 500);
+            }
+        }
+
         // =========================================================================
         // SUBTITLES: embedded detection, URL add, file upload, timing/style, sync
         //
@@ -804,45 +891,78 @@
         //    being attached, for both uploads and pasted URLs.
         // =========================================================================
 
-        function refreshSubtitleMenu() {
-            const sel = document.getElementById('subtitleTrackSelectFs');
-            sel.innerHTML = '<option value="-1">Subtitles: Off</option>';
-            for (let i = 0; i < videoElement.textTracks.length; i++) {
-                const t = videoElement.textTracks[i];
-                const opt = document.createElement('option');
-                opt.value = i;
-                opt.text = t.label || t.language || `Track ${i}`;
-                sel.appendChild(opt);
-            }
-            sel.value = currentSubtitleTrackId;
+        // Captions are now selected ONLY through Plyr's own native settings-gear
+        // menu (⚙ → Captions) — Plyr already auto-rebuilds that menu whenever
+        // <track> elements are added/removed, because the player was configured
+        // with `captions: { update: true }`. We just need to (a) stop manually
+        // touching textTrack.mode, since that's what was fighting Plyr's own
+        // renderer and stopping captions from actually appearing, and (b) listen
+        // to Plyr's own captions events to know when the local person picked a
+        // track from that native menu, so we can broadcast it to the room.
+
+        function getTrackLabelByIndex(idx) {
+            if (idx === -1 || idx === undefined || idx === null) return null;
+            const t = videoElement.textTracks[idx];
+            return t ? (t.label || null) : null;
         }
 
-        function populateEmbeddedSubtitles() {
-            // Covers HLS embedded WebVTT tracks and any <track> elements already parsed
-            refreshSubtitleMenu();
+        function findTrackIndexByLabel(label) {
+            for (let i = 0; i < videoElement.textTracks.length; i++) {
+                if (videoElement.textTracks[i].label === label) return i;
+            }
+            return -1;
         }
 
-        function selectSubtitleTrack(idx, broadcast) {
-            idx = parseInt(idx, 10);
-            currentSubtitleTrackId = idx;
+        function broadcastCaptionSelection() {
+            const idx = player.currentTrack;
+            const label = getTrackLabelByIndex(idx);
+            currentSubtitleLabel = label;
+            watchChannel.trigger('client-global-track', { type: 'caption', label });
+        }
 
-            // Drive selection through Plyr's captions system instead of only
-            // flipping native textTrack.mode — Plyr owns the actual on-screen
-            // rendering (.plyr__captions) and will otherwise ignore/override a
-            // manual mode change, which is why captions previously loaded but
-            // never displayed.
-            for (let i = 0; i < videoElement.textTracks.length; i++) {
-                videoElement.textTracks[i].mode = (i === idx) ? 'showing' : 'disabled';
-            }
-            if (idx === -1) {
+        player.on('captionsenabled', () => {
+            if (applyingRemoteCaptionChange) return;
+            broadcastCaptionSelection();
+        });
+        player.on('captionsdisabled', () => {
+            if (applyingRemoteCaptionChange) return;
+            currentSubtitleLabel = null;
+            watchChannel.trigger('client-global-track', { type: 'caption', label: null });
+        });
+        player.on('languagechange', () => {
+            if (applyingRemoteCaptionChange) return;
+            if (player.captions && player.captions.active) broadcastCaptionSelection();
+        });
+
+        // Applies a caption choice that came from someone else in the room. If we
+        // don't have that track yet (it's still being requested/transferred), this
+        // retries for a few seconds rather than silently failing.
+        function applyRemoteCaptionSelection(label) {
+            applyingRemoteCaptionChange = true;
+            currentSubtitleLabel = label;
+
+            if (!label) {
                 player.toggleCaptions(false);
-            } else {
-                player.currentTrack = idx;
-                player.toggleCaptions(true);
+                setTimeout(() => { applyingRemoteCaptionChange = false; }, 300);
+                return;
             }
 
-            document.getElementById('subtitleTrackSelectFs').value = idx;
-            if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
+            let attempts = 0;
+            const tryApply = () => {
+                const idx = findTrackIndexByLabel(label);
+                if (idx !== -1) {
+                    player.currentTrack = idx;
+                    player.toggleCaptions(true);
+                    applyingRemoteCaptionChange = false;
+                } else if (attempts < 15) {
+                    attempts++;
+                    setTimeout(tryApply, 500);
+                } else {
+                    appendMessage("System", `Couldn't find the subtitle "${label}" — it may still be syncing to you.`);
+                    applyingRemoteCaptionChange = false;
+                }
+            };
+            tryApply();
         }
 
         // ---- SRT -> VTT conversion ----
@@ -896,8 +1016,11 @@
                         trackNode.src = URL.createObjectURL(vttBlob);
                         videoElement.appendChild(trackNode);
                         setTimeout(() => {
-                            refreshSubtitleMenu();
-                            appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
+                            appendMessage("System", `Subtitle "${trackNode.label}" is ready — pick it from ⚙ Settings → Captions.`);
+                            if (pendingCaptionSelectionOnArrival === trackNode.label) {
+                                pendingCaptionSelectionOnArrival = null;
+                                applyRemoteCaptionSelection(trackNode.label);
+                            }
                         }, 400);
                     })
                     .catch(err => {
@@ -907,21 +1030,15 @@
                 trackNode.src = url;
                 videoElement.appendChild(trackNode);
                 setTimeout(() => {
-                    refreshSubtitleMenu();
-                    appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
+                    appendMessage("System", `Subtitle "${trackNode.label}" is ready — pick it from ⚙ Settings → Captions.`);
+                    if (pendingCaptionSelectionOnArrival === trackNode.label) {
+                        pendingCaptionSelectionOnArrival = null;
+                        applyRemoteCaptionSelection(trackNode.label);
+                    }
                 }, 400);
             }
 
             if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label, isSrt: !!isSrt });
-        }
-
-        function ingestSubtitleFromUrl() {
-            const input = document.getElementById('subtitleUrlInputFs');
-            const url = input.value.trim();
-            if (!url) return;
-            const label = url.split('/').pop().split('?')[0].replace(/\.(srt|vtt)$/i, '');
-            addSubtitleTrackFromUrl(url, label, true, isLikelySrt(url));
-            input.value = '';
         }
 
         // =========================================================================
@@ -942,6 +1059,8 @@
         // =========================================================================
         const SUBTITLE_CHUNK_SIZE = 7000; // chars — safely under Pusher's ~10KB cap including JSON overhead
         const incomingSubtitleTransfers = {};
+        const subtitleTextCache = {};   // label -> full VTT text, so we can serve resend requests from anyone who has it
+        const pendingUploads = {};      // transferId -> { label, targets:Set, confirmed:Set, statusEl, chunkTotal, chunksSent }
 
         function showSubtitleSyncBadge(text) {
             const badge = document.getElementById('subtitleSyncBadge');
@@ -955,19 +1074,66 @@
             if (badge) badge.style.display = 'none';
         }
 
-        function broadcastSubtitleText(vttText, label) {
+        // statusEl is optional — omitted for background resends triggered on
+        // someone else's behalf (e.g. serving a late joiner), where there's no UI
+        // element in front of us to update.
+        function broadcastSubtitleText(vttText, label, statusEl) {
             const transferId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
             const chunks = [];
             for (let i = 0; i < vttText.length; i += SUBTITLE_CHUNK_SIZE) {
                 chunks.push(vttText.slice(i, i + SUBTITLE_CHUNK_SIZE));
             }
+            const targets = new Set(getActiveMemberIds());
+            pendingUploads[transferId] = { label, targets, confirmed: new Set(), statusEl, chunkTotal: chunks.length, chunksSent: 0 };
+
+            if (targets.size === 0) {
+                if (statusEl) statusEl.textContent = `✅ "${label}" uploaded (no one else is in the room right now).`;
+                return;
+            }
+
+            updateUploadStatusUI(transferId, 'sending');
             showSubtitleSyncBadge(`Sending "${label}" to everyone...`);
+
             chunks.forEach((chunk, idx) => {
                 setTimeout(() => {
                     watchChannel.trigger('client-subtitle-chunk', { transferId, index: idx, total: chunks.length, label, chunk });
-                    if (idx === chunks.length - 1) hideSubtitleSyncBadge();
+                    const up = pendingUploads[transferId];
+                    if (!up) return;
+                    up.chunksSent++;
+                    if (up.chunksSent === chunks.length) {
+                        hideSubtitleSyncBadge();
+                        updateUploadStatusUI(transferId, 'waiting');
+                        setTimeout(() => finalizeUploadStatus(transferId), 20000); // give stragglers 20s to confirm
+                    } else {
+                        updateUploadStatusUI(transferId, 'sending');
+                    }
                 }, idx * 120);
             });
+        }
+
+        function updateUploadStatusUI(transferId, phase) {
+            const up = pendingUploads[transferId];
+            if (!up) return;
+            if (phase === 'sending') {
+                if (up.statusEl) up.statusEl.textContent = `Sending "${up.label}"… ${up.chunksSent}/${up.chunkTotal} pieces`;
+            } else {
+                if (up.statusEl) up.statusEl.textContent = `Sent — waiting for confirmation… ${up.confirmed.size}/${up.targets.size} friends synced`;
+                const statusValue = document.getElementById('subUploadStatusValue');
+                if (statusValue) statusValue.textContent = `${up.confirmed.size}/${up.targets.size} synced`;
+            }
+        }
+
+        function finalizeUploadStatus(transferId) {
+            const up = pendingUploads[transferId];
+            if (!up) return;
+            const allSynced = up.confirmed.size >= up.targets.size;
+            if (up.statusEl) {
+                up.statusEl.textContent = allSynced
+                    ? `✅ "${up.label}" synced with all ${up.targets.size} friend${up.targets.size === 1 ? '' : 's'}.`
+                    : `⚠️ "${up.label}" synced with ${up.confirmed.size}/${up.targets.size} friends — the rest may have missed it.`;
+            }
+            const statusValue = document.getElementById('subUploadStatusValue');
+            if (statusValue) statusValue.textContent = allSynced ? 'Synced' : `${up.confirmed.size}/${up.targets.size} synced`;
         }
 
         watchChannel.bind('client-subtitle-chunk', (data) => {
@@ -984,28 +1150,56 @@
             if (transfer.received === transfer.total) {
                 hideSubtitleSyncBadge();
                 const fullText = transfer.parts.join('');
+                subtitleTextCache[transfer.label] = fullText; // so we can also serve resend requests later
                 const vttBlob = new Blob([fullText], { type: 'text/vtt' });
                 addSubtitleTrackFromUrl(URL.createObjectURL(vttBlob), transfer.label, false, false);
+                watchChannel.trigger('client-subtitle-ack', { transferId: data.transferId, id: myClientId });
                 delete incomingSubtitleTransfers[data.transferId];
             }
         });
 
-        function ingestExternalSubtitles(uploaderNode) {
-            const nativeFile = uploaderNode.files[0];
-            if (!nativeFile) return;
-            const isSrt = isLikelySrt('', nativeFile.name);
-            const label = nativeFile.name.replace(/\.(vtt|srt)$/i, '');
+        watchChannel.bind('client-subtitle-ack', (data) => {
+            const up = pendingUploads[data.transferId];
+            if (!up) return;
+            up.confirmed.add(data.id);
+            updateUploadStatusUI(data.transferId, 'waiting');
+            if (up.confirmed.size >= up.targets.size) finalizeUploadStatus(data.transferId);
+        });
+
+        // A late joiner who caught up mid-video knows the room's current subtitle
+        // LABEL (via client-respond-status) but not its actual text, since the
+        // original upload only ever went out once. They ask the room to resend it;
+        // anyone still holding the text (uploader or any receiver) answers.
+        function requestSubtitleResend(label) {
+            appendMessage("System", `Requesting subtitle "${label}" from the room...`);
+            watchChannel.trigger('client-request-subtitle', { label, requester: myClientId });
+        }
+
+        watchChannel.bind('client-request-subtitle', (data) => {
+            if (data.requester === myClientId) return;
+            const text = subtitleTextCache[data.label];
+            if (text) broadcastSubtitleText(text, data.label, null);
+        });
+
+        function ingestExternalSubtitles(file, statusEl) {
+            if (!file) return;
+            const isSrt = isLikelySrt('', file.name);
+            const label = file.name.replace(/\.(vtt|srt)$/i, '');
+
+            if (statusEl) statusEl.textContent = 'Reading file…';
 
             const reader = new FileReader();
             reader.onload = () => {
                 const vttText = isSrt ? convertSrtToVtt(reader.result) : reader.result;
+                subtitleTextCache[label] = vttText;
                 const vttBlob = new Blob([vttText], { type: 'text/vtt' });
                 const localBlobUrl = URL.createObjectURL(vttBlob);
                 addSubtitleTrackFromUrl(localBlobUrl, label, false, false);
-                appendMessage("System", `Sharing subtitle "${label}" with the room...`);
-                broadcastSubtitleText(vttText, label);
+                appendMessage("System", `Uploading subtitle "${label}" to the room…`);
+                broadcastSubtitleText(vttText, label, statusEl);
             };
-            reader.readAsText(nativeFile);
+            reader.onerror = () => { if (statusEl) statusEl.textContent = 'Failed to read file.'; };
+            reader.readAsText(file);
         }
 
         function applySubtitleOffsetToCues() {
@@ -1110,6 +1304,8 @@
                 currentUsername = inputVal;
                 localStorage.setItem('party_user', currentUsername);
                 appendMessage("System", `Changed your name to: ${currentUsername}`);
+                broadcastPresence();
+                updateMemberBadge();
             }
         }
 
@@ -1187,9 +1383,111 @@
             controlsGrid.appendChild(subtitleBtn);
         }
 
+        // =========================================================================
+        // "Add Subtitles" — a genuine extra tab inside Plyr's own settings gear
+        // (⚙), sitting alongside Captions/Quality/Speed, built from Plyr's own
+        // menu markup/CSS classes so it looks identical to its native panes.
+        //
+        // Plyr doesn't have an official API for adding a custom settings tab, so
+        // this hand-builds the same DOM shape Plyr uses for its own panes and
+        // handles showing/hiding it with its own small click handlers — it does
+        // NOT touch or rely on Plyr's internal pane-switching for its existing
+        // tabs, so Captions/Quality/Speed keep working exactly as Plyr intends.
+        // =========================================================================
+        function injectNativeSubtitleUploadPane() {
+            const container = document.querySelector('.plyr__menu__container');
+            if (!container) return;
+            const homePane = container.querySelector('[id$="-home"]');
+            if (!homePane) return;
+            const panesParent = homePane.parentElement;
+            const idPrefix = homePane.id.replace(/-home$/, '');
+            const paneId = idPrefix + '-subtitle-upload';
+
+            // --- entry row in the home pane, styled like Plyr's own Captions/Quality rows ---
+            const entryBtn = document.createElement('button');
+            entryBtn.type = 'button';
+            entryBtn.className = 'plyr__control plyr__control--forward';
+            entryBtn.setAttribute('role', 'menuitem');
+            entryBtn.innerHTML = '<span>Add Subtitles</span><span class="plyr__menu__value" id="subUploadStatusValue">None yet</span>';
+            homePane.appendChild(entryBtn);
+
+            // --- the pane itself, sibling to home/captions/quality/speed ---
+            const pane = document.createElement('div');
+            pane.id = paneId;
+            pane.setAttribute('role', 'menu');
+            pane.hidden = true;
+            pane.innerHTML = `
+                <button type="button" class="plyr__control plyr__control--back" role="menuitem">Add Subtitles</button>
+                <div class="plyr-native-subtitle-pane-body">
+                    <div class="plyr-native-subtitle-row">
+                        <input type="text" id="nativeSubUrlInput" placeholder="Paste .vtt/.srt URL">
+                        <button type="button" id="nativeSubUrlAddBtn" class="plyr-native-mini-btn">Add</button>
+                    </div>
+                    <label class="plyr-native-file-label" for="nativeSubFileInput">📂 <span id="nativeSubFileName">Choose .srt/.vtt file</span></label>
+                    <input type="file" id="nativeSubFileInput" accept=".vtt,.srt" style="display:none;">
+                    <button type="button" id="nativeSubUploadBtn" class="plyr-native-mini-btn" style="width:100%; margin-top:8px;" disabled>Upload &amp; Sync to Room</button>
+                    <div id="nativeSubUploadStatus" class="plyr-native-upload-status"></div>
+                </div>
+            `;
+            panesParent.appendChild(pane);
+
+            // self-contained pane switching (doesn't touch Plyr's own tab state)
+            entryBtn.addEventListener('click', () => {
+                Array.from(panesParent.children).forEach(el => { if (el !== pane) el.hidden = true; });
+                pane.hidden = false;
+            });
+            pane.querySelector('.plyr__control--back').addEventListener('click', () => {
+                pane.hidden = true;
+                homePane.hidden = false;
+            });
+
+            // Always land back on the home tab when the gear menu is freshly opened
+            const gearButton = document.querySelector('.plyr__controls .plyr__menu > button[data-plyr="settings"]');
+            if (gearButton) {
+                gearButton.addEventListener('click', () => {
+                    setTimeout(() => {
+                        if (!pane.hidden) { pane.hidden = true; homePane.hidden = false; }
+                    }, 0);
+                });
+            }
+
+            // --- paste-URL subtitle ---
+            pane.querySelector('#nativeSubUrlAddBtn').addEventListener('click', () => {
+                const input = pane.querySelector('#nativeSubUrlInput');
+                const url = input.value.trim();
+                if (!url) return;
+                const label = url.split('/').pop().split('?')[0].replace(/\.(srt|vtt)$/i, '');
+                addSubtitleTrackFromUrl(url, label, true, isLikelySrt(url));
+                appendMessage("System", `Subtitle "${label}" added — everyone's browser will load it automatically.`);
+                input.value = '';
+            });
+            pane.querySelector('#nativeSubUrlInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') pane.querySelector('#nativeSubUrlAddBtn').click();
+            });
+
+            // --- upload flow: choose file, then an explicit Upload button shows
+            //     progress and, once sending completes, real per-friend confirmation ---
+            const fileInput = pane.querySelector('#nativeSubFileInput');
+            const fileNameLabel = pane.querySelector('#nativeSubFileName');
+            const uploadBtn = pane.querySelector('#nativeSubUploadBtn');
+            const statusEl = pane.querySelector('#nativeSubUploadStatus');
+            let chosenFile = null;
+
+            fileInput.addEventListener('change', () => {
+                chosenFile = fileInput.files[0] || null;
+                fileNameLabel.textContent = chosenFile ? chosenFile.name : 'Choose .srt/.vtt file';
+                uploadBtn.disabled = !chosenFile;
+                statusEl.textContent = '';
+            });
+            uploadBtn.addEventListener('click', () => {
+                if (!chosenFile) return;
+                uploadBtn.disabled = true;
+                ingestExternalSubtitles(chosenFile, statusEl);
+            });
+        }
+
         document.getElementById('sidebarChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(false); });
         document.getElementById('fullscreenChatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') transmitMessage(true); });
-        document.getElementById('subtitleUrlInputFs').addEventListener('keydown', (e) => { if (e.key === 'Enter') ingestSubtitleFromUrl(); });
     </script>
 </body>
 </html>
