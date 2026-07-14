@@ -1,4 +1,4 @@
-   <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -83,6 +83,18 @@
             animation: unmutePulse 2s ease-in-out infinite;
         }
         @keyframes unmutePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+        .subtitle-loading-badge {
+            display: none; position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+            align-items: center; gap: 8px; background: rgba(10, 10, 15, 0.8); backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border); color: #fff; padding: 7px 16px; border-radius: 999px;
+            font-size: 0.8rem; z-index: 12; box-shadow: 0 8px 24px rgba(0,0,0,0.4); text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+        }
+        .subtitle-loading-badge .spinner {
+            width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25);
+            border-top-color: #fff; animation: spin 0.7s linear infinite; flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         .sidebar-section {
             flex: 1; min-width: 350px; max-width: 420px; background: var(--panel-bg); border-left: 1px solid var(--border-color);
@@ -219,6 +231,10 @@
                 <button id="unmutePrompt" type="button" onclick="player.muted = false; hideUnmutePrompt();">
                     🔇 Tap to unmute
                 </button>
+
+                <div id="subtitleSyncBadge" class="subtitle-loading-badge">
+                    <span class="spinner"></span> <span id="subtitleSyncBadgeText">Syncing subtitle for everyone...</span>
+                </div>
 
                 <div id="glassInputLayer" class="plyr-fullscreen-input-layer idle-hide" style="display: none;">
                     <div style="display:flex; gap:8px;">
@@ -927,15 +943,29 @@
         const SUBTITLE_CHUNK_SIZE = 7000; // chars — safely under Pusher's ~10KB cap including JSON overhead
         const incomingSubtitleTransfers = {};
 
+        function showSubtitleSyncBadge(text) {
+            const badge = document.getElementById('subtitleSyncBadge');
+            const label = document.getElementById('subtitleSyncBadgeText');
+            if (label) label.textContent = text;
+            if (badge) badge.style.display = 'flex';
+        }
+
+        function hideSubtitleSyncBadge() {
+            const badge = document.getElementById('subtitleSyncBadge');
+            if (badge) badge.style.display = 'none';
+        }
+
         function broadcastSubtitleText(vttText, label) {
             const transferId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
             const chunks = [];
             for (let i = 0; i < vttText.length; i += SUBTITLE_CHUNK_SIZE) {
                 chunks.push(vttText.slice(i, i + SUBTITLE_CHUNK_SIZE));
             }
+            showSubtitleSyncBadge(`Sending "${label}" to everyone...`);
             chunks.forEach((chunk, idx) => {
                 setTimeout(() => {
                     watchChannel.trigger('client-subtitle-chunk', { transferId, index: idx, total: chunks.length, label, chunk });
+                    if (idx === chunks.length - 1) hideSubtitleSyncBadge();
                 }, idx * 120);
             });
         }
@@ -950,7 +980,9 @@
                 transfer.parts[data.index] = data.chunk;
                 transfer.received++;
             }
+            showSubtitleSyncBadge(`Syncing subtitle "${transfer.label}"... ${transfer.received}/${transfer.total}`);
             if (transfer.received === transfer.total) {
+                hideSubtitleSyncBadge();
                 const fullText = transfer.parts.join('');
                 const vttBlob = new Blob([fullText], { type: 'text/vtt' });
                 addSubtitleTrackFromUrl(URL.createObjectURL(vttBlob), transfer.label, false, false);
