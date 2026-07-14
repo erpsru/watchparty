@@ -353,7 +353,7 @@
         const isFreshlyCreatedRoom = !roomId;
         if (!roomId) {
             roomId = Math.random().toString(36).substring(2, 13);
-            window.history.replaceState({}, '', `?room=${roomId}`);
+            window.history.replaceState({}, '', window.location.pathname + `?room=${roomId}`);
         }
         document.getElementById('roomIdLabel').innerText = 'Room: ' + roomId;
 
@@ -1311,7 +1311,7 @@
 
         function createNewRoom() {
             const secureUniqueId = Math.random().toString(36).substring(2, 13);
-            window.location.href = `?room=${secureUniqueId}`;
+            window.location.href = window.location.pathname + `?room=${secureUniqueId}`;
         }
 
         function shareActiveRoom() {
