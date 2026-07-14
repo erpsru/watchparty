@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+   <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinema Watch Party Pro</title>
+    <title>HBS Pro</title>
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
     <script src="https://js.pusher.com/8.0/pusher.min.js"></script>
@@ -19,8 +19,8 @@
             --sync-color: #e11d48;
             --text-color: #f3f4f6;
             --border-color: rgba(255, 255, 255, 0.08);
-            --glass-bg: rgba(15, 15, 25, 0.6);
-            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-bg: rgba(12, 12, 20, 0.82);
+            --glass-border: rgba(255, 255, 255, 0.14);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -32,6 +32,7 @@
             display: flex; align-items: center; justify-content: space-between; gap: 15px; z-index: 5; flex-wrap: wrap;
         }
         .nav-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .brand-title { font-size: 1.05rem; font-weight: 800; letter-spacing: 0.3px; color: #fff; margin-right: 6px; white-space: nowrap; }
         .media-input-wrapper { flex: 1; max-width: 600px; display: flex; gap: 8px; min-width: 260px; }
 
         input[type="text"], select {
@@ -62,17 +63,26 @@
             aspect-ratio: 16 / 9; margin: 0 auto; position: relative;
         }
 
-        /* Plyr computes its own size from the video's native dimensions unless told
-           otherwise — this forces the actual player (and any big/odd-aspect source,
-           4K, portrait, whatever) to fill this fixed 16:9 box instead of shrinking
-           or letterboxing based on the file itself. */
-        .player-wrapper .plyr,
-        .player-wrapper .plyr__video-wrapper {
-            width: 100% !important; height: 100% !important; max-width: none !important;
-        }
+        /* Plyr's own `ratio: '16:9'` config (set in JS below) handles the actual
+           sizing internally via its own padding-box math — that math is also what
+           positions the captions overlay (.plyr__captions), so we deliberately do
+           NOT force width/height with !important on Plyr's internal elements here
+           anymore. Doing that previously broke Plyr's caption positioning (track
+           loaded fine, but the text rendered off-screen/zero-height). We only
+           constrain the *outer* wrapper's width so Plyr computes a consistent
+           16:9 box from it, regardless of the source video's real dimensions. */
         .player-wrapper video {
-            width: 100% !important; height: 100% !important; object-fit: contain;
+            object-fit: contain;
         }
+
+        #unmutePrompt {
+            display: none; position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+            align-items: center; gap: 6px; background: rgba(10, 10, 15, 0.75); backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border); color: #fff; padding: 8px 16px; border-radius: 999px;
+            font-size: 0.85rem; z-index: 12; box-shadow: 0 8px 24px rgba(0,0,0,0.4); cursor: pointer;
+            animation: unmutePulse 2s ease-in-out infinite;
+        }
+        @keyframes unmutePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
         .sidebar-section {
             flex: 1; min-width: 350px; max-width: 420px; background: var(--panel-bg); border-left: 1px solid var(--border-color);
@@ -144,7 +154,12 @@
             transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease, bottom 0.25s ease;
         }
         .plyr--fullscreen-active.plyr--hide-controls .plyr-fullscreen-subtitle-layer { bottom: 25px; }
-        .plyr-fullscreen-subtitle-layer .panel-title { margin-bottom: 8px; }
+        .plyr-fullscreen-subtitle-layer .panel-title {
+            margin-bottom: 8px; color: rgba(255,255,255,0.75); text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        }
+        .plyr-fullscreen-subtitle-layer .tool-label,
+        .plyr-fullscreen-input-layer input,
+        .floating-toast { text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
 
         .plyr__captions { font-size: var(--sub-size-val, 16px) !important; opacity: var(--sub-opacity-val, 1) !important; transform: translateY(var(--sub-pos-val, 0px)) !important; transition: all 0.1s ease; }
 
@@ -156,17 +171,30 @@
         .custom-player-toggle.active { background: var(--accent-color) !important; border-color: var(--accent-color) !important; }
 
         @media (max-width: 900px) {
-            .app-container { flex-direction: column; overflow-y: auto; }
-            .video-section { flex: none; width: 100%; position: sticky; top:0; z-index:10; }
-            .sidebar-section { flex: none; max-width: 100%; min-width: 100%; height: auto; }
+            body { overflow-y: auto; height: auto; min-height: 100vh; }
+            .app-container { flex-direction: column; height: auto; overflow: visible; }
+            .video-section { flex: none; width: 100%; position: sticky; top: 0; z-index: 10; }
+            /* Only the sidebar's own internal scroll is disabled here — the whole
+               page scrolls together instead of fighting with a nested scroll
+               region, which was causing scrolling to feel stuck/broken on phones. */
+            .sidebar-section { flex: none; max-width: 100%; min-width: 100%; height: auto; overflow-y: visible; }
             .top-navbar { flex-direction: column; align-items: stretch; }
         }
+
+        /* Themed scrollbar (desktop sidebar + mobile page scroll) so it's visibly
+           there and matches the glass look instead of a default system bar. */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 8px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+        * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
     </style>
 </head>
 <body>
 
     <div class="top-navbar">
         <div class="nav-group">
+            <span class="brand-title">🎬 HBS Pro</span>
             <button class="ghost" onclick="createNewRoom()">🆕 Create New Room</button>
             <button onclick="shareActiveRoom()">🔗 Share Invite Link</button>
         </div>
@@ -187,6 +215,10 @@
             <div class="player-wrapper" id="videoWrapper">
                 <video id="player" playsinline controls crossorigin></video>
                 <div id="toastLayer" class="plyr-fullscreen-toast-layer"></div>
+
+                <button id="unmutePrompt" type="button" onclick="player.muted = false; hideUnmutePrompt();">
+                    🔇 Tap to unmute
+                </button>
 
                 <div id="glassInputLayer" class="plyr-fullscreen-input-layer idle-hide" style="display: none;">
                     <div style="display:flex; gap:8px;">
@@ -378,14 +410,58 @@
             }
         });
 
+        // =========================================================================
+        // AUTOPLAY-WITH-SOUND FALLBACK
+        //
+        // Browsers block programmatic play() *with audio* unless the visitor has
+        // already interacted with the page. A brand-new joiner landing on the
+        // invite link and immediately getting caught up to "4:00, playing" has
+        // had zero interaction yet — so an unmuted play() call gets silently
+        // rejected and nothing happens. We try unmuted first (works once someone
+        // has interacted at all, e.g. clicked Load earlier), and if the browser
+        // rejects it, fall back to a muted autoplay (always allowed) plus a small
+        // tap-to-unmute prompt so the video is at least actually playing/in-sync
+        // immediately, with sound one tap away.
+        // =========================================================================
+        function attemptPlayWithFallback() {
+            const playPromise = player.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {
+                    player.muted = true;
+                    showUnmutePrompt();
+                    player.play().catch(() => { /* even muted autoplay blocked — nothing more we can do */ });
+                });
+            }
+        }
+
+        function showUnmutePrompt() {
+            const prompt = document.getElementById('unmutePrompt');
+            if (prompt) prompt.style.display = 'flex';
+        }
+
+        function hideUnmutePrompt() {
+            const prompt = document.getElementById('unmutePrompt');
+            if (prompt) prompt.style.display = 'none';
+        }
+
+        player.on('volumechange', () => {
+            if (!player.muted) hideUnmutePrompt();
+        });
+
         watchChannel.bind('client-respond-status', (data) => {
-            // Only catch up if we don't already have this exact stream loaded
             if (data.url && data.url !== activeVideoUrl) {
+                // Late-joiner catch-up: we don't have this video loaded at all yet.
                 processMediaParsing(data.url, () => {
                     beginSeekSync(data.time, data.playing);
                     subDelayOffset = data.subDelayOffset || 0;
                     syncSubtitleLabel('lblSubDelayFs', subDelayOffset);
                 });
+                awaitingManualSync = false;
+            } else if (awaitingManualSync && data.url === activeVideoUrl) {
+                // Manual "Sync to Room" pull: adopt this responder's time/play state.
+                awaitingManualSync = false;
+                beginSeekSync(data.time, data.playing);
+                appendMessage("System", "Synced to the room.");
             }
         });
 
@@ -438,7 +514,7 @@
 
             player.currentTime = targetTime;
             if (shouldPlay) {
-                player.play();
+                attemptPlayWithFallback();
             } else {
                 player.pause();
             }
@@ -529,18 +605,40 @@
             clearInterval(localHeartbeatInterval);
         });
 
+        // Track where the person actually dragged to (updates continuously while
+        // scrubbing) so we can sanity-check where the seek actually landed.
+        let lastSeekTargetHint = null;
+
         player.on('seeking', () => {
+            lastSeekTargetHint = player.currentTime;
+        });
+
+        // Broadcast off the real `seeked` completion event instead of a flat timer
+        // guessing when the seek is "probably done" — and validate the landed
+        // position against where the person actually dragged to. Some video hosts
+        // don't properly support HTTP range requests, which can make the browser
+        // silently snap back to 0:00 instead of honoring the seek; broadcasting
+        // that bad position uncorrected would spread the reset to everyone else in
+        // the room. If that mismatch is detected, we skip the broadcast and tell
+        // the person instead of corrupting sync for the whole room.
+        player.on('seeked', () => {
             if (isSyncing) return;
             clearTimeout(updateTimeout);
             updateTimeout = setTimeout(() => {
+                const actual = player.currentTime;
+                const target = lastSeekTargetHint;
+                if (target !== null && target > 5 && actual < 1.5) {
+                    appendMessage("System", "This video source doesn't seem to support jumping to a new position (the host may not support seeking) — it reset to the start instead of where you clicked.");
+                    return;
+                }
                 // Preserve whatever the play/pause state was *before* this seek —
                 // dragging the scrub bar while paused should stay paused for
                 // everyone, not force playback to start (old behavior always
                 // triggered client-video-play here, which force-played on scrub).
                 const wasPlaying = player.playing;
                 const eventName = wasPlaying ? 'client-video-play' : 'client-video-pause';
-                watchChannel.trigger(eventName, stampedPayload({ time: player.currentTime }));
-            }, 250);
+                watchChannel.trigger(eventName, stampedPayload({ time: actual }));
+            }, 150);
         });
 
         function startHeartbeatBroadcast() {
@@ -552,11 +650,20 @@
             }, 3000);
         }
 
+        // Sync button = pull the OTHER person's current time to yourself (not push
+        // yours to them). We mark that we're waiting for a response, then apply
+        // only the first matching reply — since every other client in the room
+        // answers a status request, this stops duplicate responses from re-seeking
+        // the same person over and over.
+        let awaitingManualSync = false;
+
         function requestRoomSync() {
+            awaitingManualSync = true;
             watchChannel.trigger('client-request-status', { from: currentUsername });
             document.getElementById('latencyBadge').style.display = 'none';
-            beginSeekSync(player.currentTime, player.playing);
-            watchChannel.trigger(player.playing ? 'client-video-play' : 'client-video-pause', stampedPayload({ time: player.currentTime }));
+            appendMessage("System", "Requesting the room's current playback position...");
+            // if nobody answers (e.g. you're alone in the room), stop waiting after a bit
+            setTimeout(() => { awaitingManualSync = false; }, 5000);
         }
 
         // =========================================================================
@@ -579,6 +686,26 @@
             syncSubtitleLabel('lblSubDelayFs', 0);
         }
 
+        // Surface *why* a video failed to load instead of it just sitting there
+        // silently — common causes: the link points to an HTML landing page
+        // instead of the raw file (Google Drive/Mega/etc. share links), the host
+        // blocks cross-origin loading, or it's an unsupported codec (e.g. HEVC in
+        // an MKV, which browsers generally can't play at all).
+        videoElement.addEventListener('error', () => {
+            const err = videoElement.error;
+            let reason = "Unknown playback error.";
+            if (err) {
+                if (err.code === err.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+                    reason = "This link isn't a playable video file — it may be a landing/download page rather than a direct link, or the host doesn't allow this site to load it.";
+                } else if (err.code === err.MEDIA_ERR_NETWORK) {
+                    reason = "Network error loading the video — the host may not support the request or blocked it.";
+                } else if (err.code === err.MEDIA_ERR_DECODE) {
+                    reason = "This browser can't decode this video's format/codec (common with certain MKV/HEVC files).";
+                }
+            }
+            appendMessage("System", `Couldn't play this link: ${reason}`);
+        });
+
         function processMediaParsing(url, executionCallback = null) {
             if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
             resetSubtitleAndAudioUI();
@@ -597,6 +724,11 @@
                     hlsInstance = new Hls();
                     hlsInstance.loadSource(url);
                     hlsInstance.attachMedia(videoElement);
+                    hlsInstance.on(Hls.Events.ERROR, (ev, data) => {
+                        if (data.fatal) {
+                            appendMessage("System", `Couldn't play this HLS stream (${data.details}) — the link or host may not be reachable/supported.`);
+                        }
+                    });
                     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
                         appendMessage("System", "HLS stream loaded — checking for embedded audio/subtitle tracks.");
                         populateHlsAudioTracks();
@@ -776,28 +908,72 @@
             input.value = '';
         }
 
+        // =========================================================================
+        // SHARE AN UPLOADED SUBTITLE WITH THE ROOM
+        //
+        // A local upload only ever produces a blob: URL, which is meaningless
+        // outside your own browser's memory — there's no "link" to send anyone.
+        // The only way to actually share it is to send the subtitle TEXT itself
+        // over the realtime channel and have everyone else build their own local
+        // copy from it.
+        //
+        // Pusher client events cap out around 10KB per message, and a real
+        // subtitle file for a full episode is commonly 20-150KB — well over that.
+        // So we split the (already-VTT-converted) text into small chunks, send
+        // them as a numbered sequence a little apart (to stay under Pusher's
+        // client-event rate limit), and reassemble them on the receiving side
+        // before building a local blob track from the full text.
+        // =========================================================================
+        const SUBTITLE_CHUNK_SIZE = 7000; // chars — safely under Pusher's ~10KB cap including JSON overhead
+        const incomingSubtitleTransfers = {};
+
+        function broadcastSubtitleText(vttText, label) {
+            const transferId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+            const chunks = [];
+            for (let i = 0; i < vttText.length; i += SUBTITLE_CHUNK_SIZE) {
+                chunks.push(vttText.slice(i, i + SUBTITLE_CHUNK_SIZE));
+            }
+            chunks.forEach((chunk, idx) => {
+                setTimeout(() => {
+                    watchChannel.trigger('client-subtitle-chunk', { transferId, index: idx, total: chunks.length, label, chunk });
+                }, idx * 120);
+            });
+        }
+
+        watchChannel.bind('client-subtitle-chunk', (data) => {
+            let transfer = incomingSubtitleTransfers[data.transferId];
+            if (!transfer) {
+                transfer = incomingSubtitleTransfers[data.transferId] = { parts: new Array(data.total), received: 0, total: data.total, label: data.label };
+                appendMessage("System", `Receiving subtitle "${data.label}" from the room...`);
+            }
+            if (transfer.parts[data.index] === undefined) {
+                transfer.parts[data.index] = data.chunk;
+                transfer.received++;
+            }
+            if (transfer.received === transfer.total) {
+                const fullText = transfer.parts.join('');
+                const vttBlob = new Blob([fullText], { type: 'text/vtt' });
+                addSubtitleTrackFromUrl(URL.createObjectURL(vttBlob), transfer.label, false, false);
+                delete incomingSubtitleTransfers[data.transferId];
+            }
+        });
+
         function ingestExternalSubtitles(uploaderNode) {
             const nativeFile = uploaderNode.files[0];
             if (!nativeFile) return;
             const isSrt = isLikelySrt('', nativeFile.name);
-            const label = nativeFile.name.replace(/\.(vtt|srt)$/i, '') + ' (local only)';
+            const label = nativeFile.name.replace(/\.(vtt|srt)$/i, '');
 
-            if (isSrt) {
-                // Read the local file text, convert to VTT client-side, then attach
-                // as a blob URL — never leaves the browser, still local-only.
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const vttBlob = new Blob([convertSrtToVtt(reader.result)], { type: 'text/vtt' });
-                    const localBlobUrl = URL.createObjectURL(vttBlob);
-                    addSubtitleTrackFromUrl(localBlobUrl, label, false, false);
-                    appendMessage("System", "Uploaded subtitle is local to your browser only — use the URL option to share subtitles with the room.");
-                };
-                reader.readAsText(nativeFile);
-            } else {
-                const localBlobUrl = URL.createObjectURL(nativeFile);
+            const reader = new FileReader();
+            reader.onload = () => {
+                const vttText = isSrt ? convertSrtToVtt(reader.result) : reader.result;
+                const vttBlob = new Blob([vttText], { type: 'text/vtt' });
+                const localBlobUrl = URL.createObjectURL(vttBlob);
                 addSubtitleTrackFromUrl(localBlobUrl, label, false, false);
-                appendMessage("System", "Uploaded subtitle is local to your browser only — use the URL option to share subtitles with the room.");
-            }
+                appendMessage("System", `Sharing subtitle "${label}" with the room...`);
+                broadcastSubtitleText(vttText, label);
+            };
+            reader.readAsText(nativeFile);
         }
 
         function applySubtitleOffsetToCues() {
