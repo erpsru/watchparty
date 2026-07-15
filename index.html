@@ -912,26 +912,28 @@ function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
         trackNode.src = srcUrl;
         trackNode.default = true; 
         
+        // --- STEP 3: Append the track and immediately force-trigger updates ---
         videoElement.appendChild(trackNode);
 
-        // Tell the browser to load and parse the new track
+        // Force browser to register the track change
+        videoElement.dispatchEvent(new Event('change'));
+        if (videoElement.textTracks) {
+            videoElement.textTracks.dispatchEvent(new Event('addtrack'));
+        }
+        // ----------------------------------------------------------------------
+
         if (trackNode.track) {
             trackNode.track.mode = 'showing';
         }
 
         setTimeout(() => {
-            // Force Plyr to re-parse the text tracks from the video element
-            if (player && typeof player.setCaptions === 'function') {
-                player.setCaptions();
-            }
-
             refreshSubtitleMenu();
             const newIndex = videoElement.textTracks.length - 1;
             selectSubtitleTrack(newIndex, false); 
             
-            // Turn captions ON in Plyr
-            player.toggleCaptions(true);
-
+            if (player) {
+                player.toggleCaptions(true);
+            }
             appendMessage("System", `Captions "${trackNode.label}" ready — showing now.`);
         }, 400);
     };
@@ -950,7 +952,7 @@ function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
                 finalizeTrackAddition(URL.createObjectURL(vttBlob));
             })
             .catch(err => {
-                appendMessage("System", `Couldn't load subtitle "${label}" — the source may not allow cross-origin access, or isn't reachable over HTTPS.`);
+                appendMessage("System", `Couldn't load subtitle "${label}" — check CORS or HTTPS.`);
             });
     }
 
