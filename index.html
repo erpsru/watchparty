@@ -50,6 +50,11 @@
         button.ghost { background: rgba(255,255,255,0.08); }
         button.danger { background: var(--sync-color); }
 
+        .member-badge {
+            background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: rgba(255,255,255,0.85);
+            font-size: 0.8rem; padding: 7px 14px; border-radius: 20px; cursor: default; white-space: nowrap;
+        }
+
         .app-container { display: flex; flex: 1; width: 100%; height: calc(100vh - 65px); overflow: hidden; }
 
         .video-section { flex: 3; min-width: 0; display: flex; flex-direction: column; justify-content: center; align-items: stretch; background: #000; position: relative; }
@@ -173,7 +178,21 @@
         .plyr-fullscreen-input-layer input,
         .floating-toast { text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
 
-        .plyr__captions { font-size: var(--sub-size-val, 16px) !important; opacity: var(--sub-opacity-val, 1) !important; transform: translateY(var(--sub-pos-val, 0px)) !important; transition: all 0.1s ease; }
+        /* Fully independent caption overlay — Plyr never creates or touches this
+           element, so it can't clear/hide it out from under us the way it could
+           with .plyr__captions (which Plyr only builds when captions.active is
+           true — since this player sets captions.active:false, that element may
+           not even exist, which is why nothing was rendering). */
+        .custom-caption-overlay {
+            position: absolute; left: 5%; right: 5%; bottom: 12%; text-align: center;
+            pointer-events: none; z-index: 8;
+            font-size: var(--sub-size-val, 16px); opacity: var(--sub-opacity-val, 1);
+            transform: translateY(var(--sub-pos-val, 0px)); transition: all 0.1s ease;
+        }
+        .custom-caption-line {
+            display: inline-block; background: rgba(0,0,0,0.75); color: #fff; padding: 4px 10px;
+            border-radius: 4px; line-height: 1.4; max-width: 90%;
+        }
 
         .custom-player-toggle {
             background: rgba(255,255,255,0.08) !important; border: 1px solid rgba(255,255,255,0.15) !important;
@@ -209,6 +228,7 @@
             <span class="brand-title">🎬 HBS Pro</span>
             <button class="ghost" onclick="createNewRoom()">🆕 Create New Room</button>
             <button onclick="shareActiveRoom()">🔗 Share Invite Link</button>
+            <span id="memberCountBadge" class="member-badge" title="You">👥 1 online</span>
         </div>
 
         <div class="media-input-wrapper">
@@ -226,6 +246,7 @@
         <div class="video-section">
             <div class="player-wrapper" id="videoWrapper">
                 <video id="player" playsinline controls crossorigin></video>
+                <div id="customCaptionOverlay" class="custom-caption-overlay"></div>
                 <div id="toastLayer" class="plyr-fullscreen-toast-layer"></div>
 
                 <button id="unmutePrompt" type="button" onclick="player.muted = false; hideUnmutePrompt();">
@@ -356,6 +377,43 @@
         let currentSubtitleTrackId = -1;
         let currentAudioTrackId = -1;
 
+        // ---- Room member count + hover-names badge ----
+        // Pusher client events have no built-in member list on this kind of
+        // channel, so this is a small ping/pong: everyone announces themselves
+        // periodically, and the badge's hover tooltip lists whoever has pinged
+        // recently. Purely additive — doesn't touch anything else.
+        const myClientId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+        const knownMembers = new Map(); // id -> { name, lastSeen }
+
+        function broadcastPresence() {
+            watchChannel.trigger('client-presence', { id: myClientId, name: currentUsername });
+        }
+
+        watchChannel.bind('client-presence', (data) => {
+            if (!data || data.id === myClientId) return;
+            const isNew = !knownMembers.has(data.id);
+            knownMembers.set(data.id, { name: data.name, lastSeen: Date.now() });
+            if (isNew) broadcastPresence(); // reply so a newcomer learns about us too
+            updateMemberBadge();
+        });
+
+        function getActiveMemberIds() {
+            const cutoff = Date.now() - 45000; // drop anyone who hasn't ping'd in 45s (likely left)
+            return Array.from(knownMembers.entries()).filter(([, info]) => info.lastSeen > cutoff).map(([id]) => id);
+        }
+
+        function updateMemberBadge() {
+            const badge = document.getElementById('memberCountBadge');
+            if (!badge) return;
+            const otherNames = getActiveMemberIds().map(id => knownMembers.get(id).name);
+            badge.textContent = `👥 ${otherNames.length + 1} online`;
+            badge.title = [`${currentUsername} (You)`, ...otherNames].join('\n');
+        }
+
+        setInterval(broadcastPresence, 15000);
+        setInterval(updateMemberBadge, 5000); // also prunes people who quietly left
+        updateMemberBadge();
+
         const videoElement = document.getElementById('player');
 
         const player = new Plyr(videoElement, {
@@ -392,6 +450,7 @@
 
         watchChannel.bind('pusher:subscription_succeeded', () => {
             appendMessage("System", "Connected to room: " + roomId);
+            broadcastPresence();
             setTimeout(() => {
                 watchChannel.trigger('client-request-status', { from: currentUsername });
             }, 600);
@@ -723,16 +782,17 @@
             refreshSubtitleMenu();
         }
 
-        // Direct DOM renderer using native track cues to completely bypass Plyr's cache bugs
+        // Direct DOM renderer using native track cues — renders into our own
+        // independent overlay div, completely bypassing Plyr's caption system.
         function handleManualCueChange(e) {
             const track = e.target;
-            const captionsDiv = document.querySelector('.plyr__captions');
+            const captionsDiv = document.getElementById('customCaptionOverlay');
             if (!captionsDiv || track.mode !== 'hidden') return;
 
             captionsDiv.innerHTML = '';
             if (track.activeCues && track.activeCues.length > 0) {
                 const captionInner = document.createElement('div');
-                captionInner.className = 'plyr__caption';
+                captionInner.className = 'custom-caption-line';
                 
                 let txtArray = [];
                 for (let i = 0; i < track.activeCues.length; i++) {
@@ -764,14 +824,14 @@
             // Keep Plyr's caption processing switched off so it does not clear our injected text
             player.toggleCaptions(false);
 
-            // Toggle outer Plyr structure box visualization manually
-            const captionsDiv = document.querySelector('.plyr__captions');
+            // Toggle our independent overlay box's visibility manually
+            const captionsDiv = document.getElementById('customCaptionOverlay');
             if (captionsDiv) {
                 if (idx === -1) {
-                    captionsDiv.style.setProperty('display', 'none', 'important');
+                    captionsDiv.style.display = 'none';
                     captionsDiv.innerHTML = '';
                 } else {
-                    captionsDiv.style.setProperty('display', 'block', 'important');
+                    captionsDiv.style.display = 'block';
                 }
             }
 
@@ -1020,6 +1080,8 @@
                 currentUsername = inputVal;
                 localStorage.setItem('party_user', currentUsername);
                 appendMessage("System", `Changed your name to: ${currentUsername}`);
+                broadcastPresence();
+                updateMemberBadge();
             }
         }
 
