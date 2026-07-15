@@ -937,73 +937,44 @@
             input.value = '';
         }
 
-        const SUBTITLE_CHUNK_SIZE = 7000; 
-        const incomingSubtitleTransfers = {};
+        // 1. Listen for when someone in the room broadcasts a subtitle
+watchChannel.bind('client-sync-subtitles', (data) => {
+    appendMessage("System", `Received shared subtitle: "${data.label}"`);
+    
+    // Create the subtitle file in memory as a local blob URL
+    const vttBlob = new Blob([data.content], { type: 'text/vtt' });
+    const localBlobUrl = URL.createObjectURL(vttBlob);
+    
+    // Add it to the video player
+    addSubtitleTrackFromUrl(localBlobUrl, data.label, false, false);
+});
 
-        function showSubtitleSyncBadge(text) {
-            const badge = document.getElementById('subtitleSyncBadge');
-            const label = document.getElementById('subtitleSyncBadgeText');
-            if (label) label.textContent = text;
-            if (badge) badge.style.display = 'flex';
-        }
+     function ingestExternalSubtitles(uploaderNode) {
+    const nativeFile = uploaderNode.files[0];
+    if (!nativeFile) return;
+    const isSrt = isLikelySrt('', nativeFile.name);
+    const label = nativeFile.name.replace(/\.(vtt|srt)$/i, '');
 
-        function hideSubtitleSyncBadge() {
-            const badge = document.getElementById('subtitleSyncBadge');
-            if (badge) badge.style.display = 'none';
-        }
+    const reader = new FileReader();
+    reader.onload = () => {
+        // Convert SRT to VTT if necessary, otherwise use raw text
+        const vttText = isSrt ? convertSrtToVtt(reader.result) : reader.result;
+        const vttBlob = new Blob([vttText], { type: 'text/vtt' });
+        const localBlobUrl = URL.createObjectURL(vttBlob);
+        
+        // 1. Load the subtitle locally on our screen instantly
+        addSubtitleTrackFromUrl(localBlobUrl, label, false, false);
+        appendMessage("System", `Loaded subtitle "${label}" locally.`);
 
-        function broadcastSubtitleText(vttText, label) {
-            const transferId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-            const chunks = [];
-            for (let i = 0; i < vttText.length; i += SUBTITLE_CHUNK_SIZE) {
-                chunks.push(vttText.slice(i, i + SUBTITLE_CHUNK_SIZE));
-            }
-            showSubtitleSyncBadge(`Sending "${label}" to everyone...`);
-            chunks.forEach((chunk, idx) => {
-                setTimeout(() => {
-                    watchChannel.trigger('client-subtitle-chunk', { transferId, index: idx, total: chunks.length, label, chunk });
-                    if (idx === chunks.length - 1) hideSubtitleSyncBadge();
-                }, idx * 120);
-            });
-        }
-
-        watchChannel.bind('client-subtitle-chunk', (data) => {
-            let transfer = incomingSubtitleTransfers[data.transferId];
-            if (!transfer) {
-                transfer = incomingSubtitleTransfers[data.transferId] = { parts: new Array(data.total), received: 0, total: data.total, label: data.label };
-                appendMessage("System", `Receiving subtitle "${data.label}" from the room...`);
-            }
-            if (transfer.parts[data.index] === undefined) {
-                transfer.parts[data.index] = data.chunk;
-                transfer.received++;
-            }
-            showSubtitleSyncBadge(`Syncing subtitle "${transfer.label}"... ${transfer.received}/${transfer.total}`);
-            if (transfer.received === transfer.total) {
-                hideSubtitleSyncBadge();
-                const fullText = transfer.parts.join('');
-                const vttBlob = new Blob([fullText], { type: 'text/vtt' });
-                addSubtitleTrackFromUrl(URL.createObjectURL(vttBlob), transfer.label, false, false);
-                delete incomingSubtitleTransfers[data.transferId];
-            }
+        // 2. Broadcast the raw text directly to everyone in the room (no more chunking!)
+        watchChannel.trigger('client-sync-subtitles', {
+            content: vttText,
+            label: label
         });
-
-        function ingestExternalSubtitles(uploaderNode) {
-            const nativeFile = uploaderNode.files[0];
-            if (!nativeFile) return;
-            const isSrt = isLikelySrt('', nativeFile.name);
-            const label = nativeFile.name.replace(/\.(vtt|srt)$/i, '');
-
-            const reader = new FileReader();
-            reader.onload = () => {
-                const vttText = isSrt ? convertSrtToVtt(reader.result) : reader.result;
-                const vttBlob = new Blob([vttText], { type: 'text/vtt' });
-                const localBlobUrl = URL.createObjectURL(vttBlob);
-                addSubtitleTrackFromUrl(localBlobUrl, label, false, false);
-                appendMessage("System", `Sharing subtitle "${label}" with the room...`);
-                broadcastSubtitleText(vttText, label);
-            };
-            reader.readAsText(nativeFile);
-        }
+        appendMessage("System", `Shared subtitle "${label}" with the room!`);
+    };
+    reader.readAsText(nativeFile);
+}
 
         function applySubtitleOffsetToCues() {
             for (let i = 0; i < videoElement.textTracks.length; i++) {
