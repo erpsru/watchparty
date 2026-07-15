@@ -364,6 +364,7 @@
         let hlsInstance = null;
         let localHeartbeatInterval = null;
 
+        let subtitleModeGuardInterval = null; // keeps our selected track's mode='hidden' from being reset by Plyr
         let subDelayOffset = 0.0;
         let subSizePx = 16;
         let subOpacityFloat = 1.0;
@@ -837,6 +838,21 @@
 
             document.getElementById('subtitleTrackSelectFs').value = idx;
             if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
+
+            // Plyr watches the video's textTracks and, even with captions
+            // disabled, tends to reset newly-added/selected tracks back to
+            // mode 'disabled' shortly after we set 'hidden' — which silently
+            // stops cuechange from firing. Re-assert our mode periodically
+            // while a track is selected so Plyr can't win that race.
+            clearInterval(subtitleModeGuardInterval);
+            if (idx !== -1) {
+                subtitleModeGuardInterval = setInterval(() => {
+                    const t = videoElement.textTracks[idx];
+                    if (t && t.mode !== 'hidden') {
+                        t.mode = 'hidden';
+                    }
+                }, 500);
+            }
         }
 
         function srtTimeToVtt(t) {
