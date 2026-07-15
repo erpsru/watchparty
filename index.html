@@ -52,8 +52,19 @@
 
         .member-badge {
             background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: rgba(255,255,255,0.85);
-            font-size: 0.8rem; padding: 7px 14px; border-radius: 20px; cursor: default; white-space: nowrap;
+            font-size: 0.8rem; padding: 7px 14px; border-radius: 20px; cursor: pointer; white-space: nowrap;
         }
+        .member-badge-wrapper { position: relative; }
+        .member-list-dropdown {
+            display: none; position: absolute; top: calc(100% + 8px); left: 0; min-width: 180px; max-width: 260px;
+            background: var(--glass-bg); backdrop-filter: blur(16px); border: 1px solid var(--glass-border);
+            border-radius: 10px; padding: 8px; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .member-list-dropdown.open { display: block; }
+        .member-list-item {
+            font-size: 0.82rem; padding: 5px 8px; color: #fff; border-radius: 6px; word-break: break-word;
+        }
+        .member-list-item:hover { background: rgba(255,255,255,0.06); }
 
         .app-container { display: flex; flex: 1; width: 100%; height: calc(100vh - 65px); overflow: hidden; }
 
@@ -178,20 +189,15 @@
         .plyr-fullscreen-input-layer input,
         .floating-toast { text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
 
-        /* Fully independent caption overlay — Plyr never creates or touches this
-           element, so it can't clear/hide it out from under us the way it could
-           with .plyr__captions (which Plyr only builds when captions.active is
-           true — since this player sets captions.active:false, that element may
-           not even exist, which is why nothing was rendering). */
-        .custom-caption-overlay {
-            position: absolute; left: 5%; right: 5%; bottom: 12%; text-align: center;
-            pointer-events: none; z-index: 8;
-            font-size: var(--sub-size-val, 16px); opacity: var(--sub-opacity-val, 1);
-            transform: translateY(var(--sub-pos-val, 0px)); transition: all 0.1s ease;
-        }
-        .custom-caption-line {
-            display: inline-block; background: rgba(0,0,0,0.75); color: #fff; padding: 4px 10px;
-            border-radius: 4px; line-height: 1.4; max-width: 90%;
+        /* We now let Plyr render captions natively (captions.active:true) so
+           its own CC button / settings menu work as expected. These vars
+           just let our timing/size/position/opacity controls reach into
+           Plyr's own caption line element instead of a competing overlay. */
+        .plyr__caption {
+            font-size: var(--sub-size-val, 16px) !important;
+            opacity: var(--sub-opacity-val, 1);
+            transform: translateY(var(--sub-pos-val, 0px));
+            transition: all 0.1s ease;
         }
 
         .custom-player-toggle {
@@ -228,7 +234,10 @@
             <span class="brand-title">🎬 HBS Pro</span>
             <button class="ghost" onclick="createNewRoom()">🆕 Create New Room</button>
             <button onclick="shareActiveRoom()">🔗 Share Invite Link</button>
-            <span id="memberCountBadge" class="member-badge" title="You">👥 1 online</span>
+            <div class="member-badge-wrapper" id="memberBadgeWrapper">
+                <span id="memberCountBadge" class="member-badge" onclick="toggleMemberList(event)">👥 1 online</span>
+                <div id="memberListDropdown" class="member-list-dropdown"></div>
+            </div>
         </div>
 
         <div class="media-input-wrapper">
@@ -246,7 +255,6 @@
         <div class="video-section">
             <div class="player-wrapper" id="videoWrapper">
                 <video id="player" playsinline controls crossorigin></video>
-                <div id="customCaptionOverlay" class="custom-caption-overlay"></div>
                 <div id="toastLayer" class="plyr-fullscreen-toast-layer"></div>
 
                 <button id="unmutePrompt" type="button" onclick="player.muted = false; hideUnmutePrompt();">
@@ -364,7 +372,6 @@
         let hlsInstance = null;
         let localHeartbeatInterval = null;
 
-        let subtitleModeGuardInterval = null; // keeps our selected track's mode='hidden' from being reset by Plyr
         let subDelayOffset = 0.0;
         let subSizePx = 16;
         let subOpacityFloat = 1.0;
@@ -383,7 +390,7 @@
         const player = new Plyr(videoElement, {
             controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'fullscreen'],
             settings: ['captions', 'quality', 'speed'],
-            captions: { active: false, update: false }, // Let manual handler control drawing to prevent conflicts
+            captions: { active: true, update: true }, // Let Plyr own the CC button + track list natively
             ratio: '16:9' 
         });
 
@@ -402,16 +409,24 @@
 
         const watchChannel = pusher.subscribe(channelName);
 
-        // ---- Room member count + hover-names badge ----
+        // ---- Room member count + click-to-view names ----
         // Pusher client events have no built-in member list on this kind of
         // channel, so this is a small ping/pong: everyone announces themselves
-        // periodically, and the badge's hover tooltip lists whoever has pinged
-        // recently. Purely additive — doesn't touch anything else.
+        // periodically, and the badge's dropdown lists whoever has pinged
+        // recently. An explicit leave signal on unload speeds up removal;
+        // the ping/cutoff timers are the fallback for tabs that close
+        // without firing it (crashes, killed mobile tabs, etc).
         const myClientId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
         const knownMembers = new Map(); // id -> { name, lastSeen }
+        const PRESENCE_PING_MS = 8000;
+        const PRESENCE_CUTOFF_MS = 20000;
 
         function broadcastPresence() {
             watchChannel.trigger('client-presence', { id: myClientId, name: currentUsername });
+        }
+
+        function broadcastPresenceLeave() {
+            try { watchChannel.trigger('client-presence-leave', { id: myClientId }); } catch (e) {}
         }
 
         watchChannel.bind('client-presence', (data) => {
@@ -422,8 +437,17 @@
             updateMemberBadge();
         });
 
+        watchChannel.bind('client-presence-leave', (data) => {
+            if (!data || data.id === myClientId) return;
+            knownMembers.delete(data.id);
+            updateMemberBadge();
+        });
+
+        window.addEventListener('beforeunload', broadcastPresenceLeave);
+        window.addEventListener('pagehide', broadcastPresenceLeave);
+
         function getActiveMemberIds() {
-            const cutoff = Date.now() - 45000; // drop anyone who hasn't ping'd in 45s (likely left)
+            const cutoff = Date.now() - PRESENCE_CUTOFF_MS; // drop anyone who hasn't ping'd recently (likely left)
             return Array.from(knownMembers.entries()).filter(([, info]) => info.lastSeen > cutoff).map(([id]) => id);
         }
 
@@ -432,11 +456,43 @@
             if (!badge) return;
             const otherNames = getActiveMemberIds().map(id => knownMembers.get(id).name);
             badge.textContent = `👥 ${otherNames.length + 1} online`;
-            badge.title = [`${currentUsername} (You)`, ...otherNames].join('\n');
+            const dropdown = document.getElementById('memberListDropdown');
+            if (dropdown && dropdown.classList.contains('open')) renderMemberList();
         }
 
-        setInterval(broadcastPresence, 15000);
-        setInterval(updateMemberBadge, 5000); // also prunes people who quietly left
+        function renderMemberList() {
+            const dropdown = document.getElementById('memberListDropdown');
+            if (!dropdown) return;
+            const otherNames = getActiveMemberIds().map(id => knownMembers.get(id).name);
+            const allNames = [`${currentUsername} (You)`, ...otherNames];
+            dropdown.innerHTML = '';
+            allNames.forEach(name => {
+                const row = document.createElement('div');
+                row.className = 'member-list-item';
+                row.textContent = name; // textContent — names are untrusted user input
+                dropdown.appendChild(row);
+            });
+        }
+
+        function toggleMemberList(e) {
+            if (e) e.stopPropagation();
+            const dropdown = document.getElementById('memberListDropdown');
+            if (!dropdown) return;
+            const willOpen = !dropdown.classList.contains('open');
+            dropdown.classList.toggle('open', willOpen);
+            if (willOpen) renderMemberList();
+        }
+
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('memberListDropdown');
+            const wrapper = document.getElementById('memberBadgeWrapper');
+            if (dropdown && dropdown.classList.contains('open') && wrapper && !wrapper.contains(e.target)) {
+                dropdown.classList.remove('open');
+            }
+        });
+
+        setInterval(broadcastPresence, PRESENCE_PING_MS);
+        setInterval(updateMemberBadge, 3000); // also prunes people who quietly left
         updateMemberBadge();
 
         player.on('ready', () => {
@@ -783,76 +839,21 @@
             refreshSubtitleMenu();
         }
 
-        // Direct DOM renderer using native track cues — renders into our own
-        // independent overlay div, completely bypassing Plyr's caption system.
-        function handleManualCueChange(e) {
-            const track = e.target;
-            const captionsDiv = document.getElementById('customCaptionOverlay');
-            if (!captionsDiv || track.mode !== 'hidden') return;
-
-            captionsDiv.innerHTML = '';
-            if (track.activeCues && track.activeCues.length > 0) {
-                const captionInner = document.createElement('div');
-                captionInner.className = 'custom-caption-line';
-                
-                let txtArray = [];
-                for (let i = 0; i < track.activeCues.length; i++) {
-                    txtArray.push(track.activeCues[i].text);
-                }
-                captionInner.innerHTML = txtArray.join('<br>');
-                captionsDiv.appendChild(captionInner);
-            }
-        }
-
         function selectSubtitleTrack(idx, broadcast) {
             idx = parseInt(idx, 10);
             currentSubtitleTrackId = idx;
 
-            // Flip modes cleanly and map listener dynamically
-            for (let i = 0; i < videoElement.textTracks.length; i++) {
-                const t = videoElement.textTracks[i];
-                if (i === idx) {
-                    t.mode = 'hidden'; // 'hidden' loads cues in background without browser styling conflicts
-                    t.removeEventListener('cuechange', handleManualCueChange);
-                    t.addEventListener('cuechange', handleManualCueChange);
-                    handleManualCueChange({ target: t }); // Process immediate rendering frame
-                } else {
-                    t.mode = 'disabled';
-                    t.removeEventListener('cuechange', handleManualCueChange);
-                }
-            }
-
-            // Keep Plyr's caption processing switched off so it does not clear our injected text
-            player.toggleCaptions(false);
-
-            // Toggle our independent overlay box's visibility manually
-            const captionsDiv = document.getElementById('customCaptionOverlay');
-            if (captionsDiv) {
-                if (idx === -1) {
-                    captionsDiv.style.display = 'none';
-                    captionsDiv.innerHTML = '';
-                } else {
-                    captionsDiv.style.display = 'block';
-                }
+            if (idx === -1) {
+                player.toggleCaptions(false);
+            } else {
+                // Let Plyr's own captions module own rendering + the CC
+                // button state — this is what it was fighting us over before.
+                player.currentTrack = idx;
+                player.toggleCaptions(true);
             }
 
             document.getElementById('subtitleTrackSelectFs').value = idx;
             if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
-
-            // Plyr watches the video's textTracks and, even with captions
-            // disabled, tends to reset newly-added/selected tracks back to
-            // mode 'disabled' shortly after we set 'hidden' — which silently
-            // stops cuechange from firing. Re-assert our mode periodically
-            // while a track is selected so Plyr can't win that race.
-            clearInterval(subtitleModeGuardInterval);
-            if (idx !== -1) {
-                subtitleModeGuardInterval = setInterval(() => {
-                    const t = videoElement.textTracks[idx];
-                    if (t && t.mode !== 'hidden') {
-                        t.mode = 'hidden';
-                    }
-                }, 500);
-            }
         }
 
         function srtTimeToVtt(t) {
@@ -891,7 +892,6 @@
             const finalizeTrackAddition = (srcUrl) => {
                 trackNode.src = srcUrl;
                 videoElement.appendChild(trackNode);
-                trackNode.track.mode = 'hidden'; // Force browser parsing engine to compile source file immediately
                 setTimeout(() => {
                     refreshSubtitleMenu();
                     appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
