@@ -839,21 +839,34 @@
             refreshSubtitleMenu();
         }
 
-        function selectSubtitleTrack(idx, broadcast) {
+       function selectSubtitleTrack(idx, broadcast) {
             idx = parseInt(idx, 10);
             currentSubtitleTrackId = idx;
 
             if (idx === -1) {
                 player.toggleCaptions(false);
+                // Turn off all native browser tracks
+                for (let i = 0; i < videoElement.textTracks.length; i++) {
+                    videoElement.textTracks[i].mode = 'disabled';
+                }
             } else {
-                // Let Plyr's own captions module own rendering + the CC
-                // button state — this is what it was fighting us over before.
-                player.currentTrack = idx;
+                // Force the native browser tracks to toggle (bypasses Plyr limitations)
+                for (let i = 0; i < videoElement.textTracks.length; i++) {
+                    if (i === idx) {
+                        videoElement.textTracks[i].mode = 'showing';
+                    } else {
+                        videoElement.textTracks[i].mode = 'disabled';
+                    }
+                }
                 player.toggleCaptions(true);
             }
 
-            document.getElementById('subtitleTrackSelectFs').value = idx;
+            // Update the dropdown menu selection visually
+            const sel = document.getElementById('subtitleTrackSelectFs');
+            if (sel) sel.value = idx;
+
             if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
+        }
         }
 
         function srtTimeToVtt(t) {
@@ -883,7 +896,7 @@
             return target.endsWith('.srt');
         }
 
-        function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
+function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
             const trackNode = document.createElement('track');
             trackNode.kind = 'subtitles';
             trackNode.label = label || 'Subtitle';
@@ -891,11 +904,19 @@
 
             const finalizeTrackAddition = (srcUrl) => {
                 trackNode.src = srcUrl;
+                trackNode.default = true; // Fix: Tells browser this is the active track
+                
                 videoElement.appendChild(trackNode);
+
+                // Fix: Force the browser to immediately fetch and parse the blob text
+                if (trackNode.track) {
+                    trackNode.track.mode = 'hidden';
+                }
+
                 setTimeout(() => {
                     refreshSubtitleMenu();
                     const newIndex = videoElement.textTracks.length - 1;
-                    selectSubtitleTrack(newIndex, false); // auto-enable through Plyr's native CC once ready
+                    selectSubtitleTrack(newIndex, false); 
                     appendMessage("System", `Captions "${trackNode.label}" ready — showing now.`);
                 }, 400);
             };
