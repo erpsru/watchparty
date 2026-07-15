@@ -866,7 +866,6 @@
 
             if (broadcast) watchChannel.trigger('client-global-track', { type: 'caption', trackId: idx });
         }
-
         function srtTimeToVtt(t) {
             return t.replace(',', '.');
         }
@@ -895,57 +894,59 @@
         }
 
 function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
-            const trackNode = document.createElement('track');
-            trackNode.kind = 'subtitles';
-            trackNode.label = label || 'Subtitle';
-            trackNode.srclang = 'en';
+    const trackNode = document.createElement('track');
+    trackNode.kind = 'subtitles';
+    trackNode.label = label || 'Subtitle';
+    trackNode.srclang = 'en';
 
-            const finalizeTrackAddition = (srcUrl) => {
-                trackNode.src = srcUrl;
-                trackNode.default = true; // Fix: Tells browser this is the active track
-                
-                videoElement.appendChild(trackNode);
+    const finalizeTrackAddition = (srcUrl) => {
+        trackNode.src = srcUrl;
+        trackNode.default = true; 
+        
+        videoElement.appendChild(trackNode);
 
-                // Fix: Force the browser to immediately fetch and parse the blob text
-                if (trackNode.track) {
-                    trackNode.track.mode = 'hidden';
-                }
+        // Tell the browser to load and parse the new track
+        if (trackNode.track) {
+            trackNode.track.mode = 'hidden';
+        }
 
-                setTimeout(() => {
-                    refreshSubtitleMenu();
-                    const newIndex = videoElement.textTracks.length - 1;
-                    selectSubtitleTrack(newIndex, false); 
-                    appendMessage("System", `Captions "${trackNode.label}" ready — showing now.`);
-                }, 400);
-            };
-
-            if (url.startsWith('blob:')) {
-                // Already a local blob (from a file upload or a chunk-transfer
-                // reassembly) — no network fetch needed, and no CORS involved.
-                finalizeTrackAddition(url);
-            } else {
-                // Fetch remote .vtt AND .srt through the same path and re-host
-                // as a local blob URL. This avoids the <track> element's own
-                // CORS fetch (forced by the <video crossorigin> attribute),
-                // which was silently dropping .vtt tracks with no error when
-                // the host didn't send CORS headers.
-                fetch(url)
-                    .then(res => {
-                        if (!res.ok) throw new Error('Failed to fetch subtitle file');
-                        return res.text();
-                    })
-                    .then(rawText => {
-                        const vttText = isSrt ? convertSrtToVtt(rawText) : rawText;
-                        const vttBlob = new Blob([vttText], { type: 'text/vtt' });
-                        finalizeTrackAddition(URL.createObjectURL(vttBlob));
-                    })
-                    .catch(err => {
-                        appendMessage("System", `Couldn't load subtitle "${label}" — the source may not allow cross-origin access, or isn't reachable over HTTPS.`);
-                    });
+        setTimeout(() => {
+            // CRITICAL: Force Plyr to re-parse the text tracks and rebuild its subtitle menu
+            if (player && typeof player.setCaptions === 'function') {
+                player.setCaptions();
             }
 
-            if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label, isSrt: !!isSrt });
-        }
+            refreshSubtitleMenu();
+            const newIndex = videoElement.textTracks.length - 1;
+            selectSubtitleTrack(newIndex, false); 
+            
+            // Turn captions ON in Plyr's settings
+            player.toggleCaptions(true);
+
+            appendMessage("System", `Captions "${trackNode.label}" ready — showing now.`);
+        }, 400);
+    };
+
+    if (url.startsWith('blob:')) {
+        finalizeTrackAddition(url);
+    } else {
+        fetch(url)
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch subtitle file');
+                return res.text();
+            })
+            .then(rawText => {
+                const vttText = isSrt ? convertSrtToVtt(rawText) : rawText;
+                const vttBlob = new Blob([vttText], { type: 'text/vtt' });
+                finalizeTrackAddition(URL.createObjectURL(vttBlob));
+            })
+            .catch(err => {
+                appendMessage("System", `Couldn't load subtitle "${label}" — the source may not allow cross-origin access, or isn't reachable over HTTPS.`);
+            });
+    }
+
+    if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label, isSrt: !!isSrt });
+}
 
         function ingestSubtitleFromUrl() {
             const input = document.getElementById('subtitleUrlInputFs');
