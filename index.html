@@ -377,6 +377,30 @@
         let currentSubtitleTrackId = -1;
         let currentAudioTrackId = -1;
 
+        const videoElement = document.getElementById('player');
+
+        const player = new Plyr(videoElement, {
+            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'fullscreen'],
+            settings: ['captions', 'quality', 'speed'],
+            captions: { active: false, update: false }, // Let manual handler control drawing to prevent conflicts
+            ratio: '16:9' 
+        });
+
+        const pusher = new Pusher(PUSHER_KEY, {
+            cluster: PUSHER_CLUSTER,
+            channelAuthorization: {
+                transport: 'ajax',
+                customHandler: function({ socketId, channelName }, callback) {
+                    const stringToSign = socketId + ":" + channelName;
+                    const hash = CryptoJS.HmacSHA256(stringToSign, PUSHER_SECRET);
+                    const signature = CryptoJS.enc.Hex.stringify(hash);
+                    callback(null, { auth: PUSHER_KEY + ":" + signature });
+                }
+            }
+        });
+
+        const watchChannel = pusher.subscribe(channelName);
+
         // ---- Room member count + hover-names badge ----
         // Pusher client events have no built-in member list on this kind of
         // channel, so this is a small ping/pong: everyone announces themselves
@@ -413,30 +437,6 @@
         setInterval(broadcastPresence, 15000);
         setInterval(updateMemberBadge, 5000); // also prunes people who quietly left
         updateMemberBadge();
-
-        const videoElement = document.getElementById('player');
-
-        const player = new Plyr(videoElement, {
-            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'fullscreen'],
-            settings: ['captions', 'quality', 'speed'],
-            captions: { active: false, update: false }, // Let manual handler control drawing to prevent conflicts
-            ratio: '16:9' 
-        });
-
-        const pusher = new Pusher(PUSHER_KEY, {
-            cluster: PUSHER_CLUSTER,
-            channelAuthorization: {
-                transport: 'ajax',
-                customHandler: function({ socketId, channelName }, callback) {
-                    const stringToSign = socketId + ":" + channelName;
-                    const hash = CryptoJS.HmacSHA256(stringToSign, PUSHER_SECRET);
-                    const signature = CryptoJS.enc.Hex.stringify(hash);
-                    callback(null, { auth: PUSHER_KEY + ":" + signature });
-                }
-            }
-        });
-
-        const watchChannel = pusher.subscribe(channelName);
 
         player.on('ready', () => {
             const plyrContainer = document.querySelector('.plyr');
