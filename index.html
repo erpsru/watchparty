@@ -12,6 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
 
     <style>
+        <style>
         :root {
             --bg-color: #0b0b0e;
             --panel-bg: rgba(20, 20, 27, 0.75);
@@ -21,6 +22,11 @@
             --border-color: rgba(255, 255, 255, 0.08);
             --glass-bg: rgba(12, 12, 20, 0.82);
             --glass-border: rgba(255, 255, 255, 0.14);
+            
+            /* ADD THESE THREE LINES HERE */
+            --sub-size-val: 16px;
+            --sub-opacity-val: 1;
+            --sub-pos-val: 0px;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -907,11 +913,11 @@ function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
 
         // Tell the browser to load and parse the new track
         if (trackNode.track) {
-            trackNode.track.mode = 'hidden';
+            trackNode.track.mode = 'showing';
         }
 
         setTimeout(() => {
-            // CRITICAL: Force Plyr to re-parse the text tracks and rebuild its subtitle menu
+            // Force Plyr to re-parse the text tracks from the video element
             if (player && typeof player.setCaptions === 'function') {
                 player.setCaptions();
             }
@@ -920,7 +926,7 @@ function addSubtitleTrackFromUrl(url, label, broadcast, isSrt) {
             const newIndex = videoElement.textTracks.length - 1;
             selectSubtitleTrack(newIndex, false); 
             
-            // Turn captions ON in Plyr's settings
+            // Turn captions ON in Plyr
             player.toggleCaptions(true);
 
             appendMessage("System", `Captions "${trackNode.label}" ready — showing now.`);
