@@ -882,21 +882,29 @@
                 }, 400);
             };
 
-            if (isSrt) {
+            if (url.startsWith('blob:')) {
+                // Already a local blob (from a file upload or a chunk-transfer
+                // reassembly) — no network fetch needed, and no CORS involved.
+                finalizeTrackAddition(url);
+            } else {
+                // Fetch remote .vtt AND .srt through the same path and re-host
+                // as a local blob URL. This avoids the <track> element's own
+                // CORS fetch (forced by the <video crossorigin> attribute),
+                // which was silently dropping .vtt tracks with no error when
+                // the host didn't send CORS headers.
                 fetch(url)
                     .then(res => {
                         if (!res.ok) throw new Error('Failed to fetch subtitle file');
                         return res.text();
                     })
-                    .then(srtText => {
-                        const vttBlob = new Blob([convertSrtToVtt(srtText)], { type: 'text/vtt' });
+                    .then(rawText => {
+                        const vttText = isSrt ? convertSrtToVtt(rawText) : rawText;
+                        const vttBlob = new Blob([vttText], { type: 'text/vtt' });
                         finalizeTrackAddition(URL.createObjectURL(vttBlob));
                     })
                     .catch(err => {
-                        appendMessage("System", `Couldn't load subtitle "${label}" — the source may not allow cross-origin access.`);
+                        appendMessage("System", `Couldn't load subtitle "${label}" — the source may not allow cross-origin access, or isn't reachable over HTTPS.`);
                     });
-            } else {
-                finalizeTrackAddition(url);
             }
 
             if (broadcast) watchChannel.trigger('client-subtitle-url', { url, label, isSrt: !!isSrt });
