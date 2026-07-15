@@ -12,7 +12,15 @@
     <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
 
     <style>
-        <style>
+        /* Prevent Plyr from blocking and hiding the native subtitles */
+.plyr video::-webkit-media-text-track-container {
+    display: block !important;
+}
+video::cue {
+    background: rgba(0, 0, 0, 0.75) !important;
+    color: #ffffff !important;
+    font-size: 18px !important;
+}
         :root {
             --bg-color: #0b0b0e;
             --panel-bg: rgba(20, 20, 27, 0.75);
