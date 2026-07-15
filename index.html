@@ -522,7 +522,7 @@
                 watchChannel.trigger('client-respond-status', {
                     url: activeVideoUrl,
                     time: player.currentTime,
-                    playing: player.playing,
+                    playing: !videoElement.paused,
                     audioTrack: currentAudioTrackId,
                     subtitleTrack: currentSubtitleTrackId,
                     subDelayOffset
@@ -653,7 +653,7 @@
         });
 
         watchChannel.bind('client-heartbeat', (data) => {
-            if (!player.playing || isSyncing) return;
+            if (videoElement.paused || isSyncing) return;
             const absoluteDelta = data.time - player.currentTime;
             const badge = document.getElementById('latencyBadge');
             if (absoluteDelta > 1.5) {
@@ -692,7 +692,7 @@
                     appendMessage("System", "This video source doesn't seem to support jumping to a new position — it reset to the start instead of where you clicked.");
                     return;
                 }
-                const wasPlaying = player.playing;
+                const wasPlaying = !videoElement.paused;
                 const eventName = wasPlaying ? 'client-video-play' : 'client-video-pause';
                 watchChannel.trigger(eventName, stampedPayload({ time: actual }));
             }, 150);
@@ -701,7 +701,7 @@
         function startHeartbeatBroadcast() {
             clearInterval(localHeartbeatInterval);
             localHeartbeatInterval = setInterval(() => {
-                if (player.playing && !isSyncing) {
+                if (!videoElement.paused && !isSyncing) {
                     watchChannel.trigger('client-heartbeat', { time: player.currentTime });
                 }
             }, 3000);
@@ -894,7 +894,9 @@
                 videoElement.appendChild(trackNode);
                 setTimeout(() => {
                     refreshSubtitleMenu();
-                    appendMessage("System", `Subtitle track "${trackNode.label}" added${broadcast ? ' for everyone' : ''}.`);
+                    const newIndex = videoElement.textTracks.length - 1;
+                    selectSubtitleTrack(newIndex, false); // auto-enable through Plyr's native CC once ready
+                    appendMessage("System", `Captions "${trackNode.label}" ready — showing now.`);
                 }, 400);
             };
 
